@@ -1,0 +1,88 @@
+<?xml version="1.0" encoding="utf-8"?>
+<robot xmlns:xacro="http://www.ros.org/wiki/xacro"  name="r5">
+
+  <xacro:property name="wheel_offset_x" value="0.20341" />
+  <xacro:property name="wheel_offset_y" value="0.130" />
+  <xacro:property name="wheel_offset_z" value="-0.2337" />
+
+  <xacro:arg name="robot_name" default="r5"/>
+  <xacro:arg name="prefix" default=""/>
+  <xacro:arg name="use_gazebo" default="false"/>
+
+  <xacro:include filename="$(find r5)/urdf/sensors/lidar.urdf.xacro" />
+  <xacro:include filename="$(find r5)/urdf/sensors/imu.urdf.xacro"/>
+  <xacro:include filename="$(find r5)/urdf/mech/wheel.urdf.xacro"/>
+  <xacro:include filename="$(find r5)/urdf/mech/r5_base.urdf.xacro"/>
+  
+  <xacro:r5_base prefix="$(arg prefix)"/>
+    
+  <!-- Front Right (FR) -->
+  <xacro:wheel 
+    prefix="$(arg prefix)" 
+    side="front_left"
+    parent_link="base_link"
+    x_offset="${wheel_offset_x}"
+    y_offset="${wheel_offset_y}"
+    z_offset="${wheel_offset_z}"
+    flip="1" /> <!--flip mesh-->
+  
+  <!-- Front Left (FL) -->
+  <xacro:wheel 
+    prefix="$(arg prefix)"
+    side="front_right"
+    parent_link="base_link"
+    x_offset="${wheel_offset_x}"
+    y_offset="${-wheel_offset_y}"
+    z_offset="${wheel_offset_z}"
+    flip="-1" /> 
+
+  <!-- Rear Right (RR) -->
+  <xacro:wheel 
+    prefix="$(arg prefix)"
+    side="rear_right"
+    parent_link="base_link"
+    x_offset="${-wheel_offset_x}"
+    y_offset="${-wheel_offset_y}"
+    z_offset="${wheel_offset_z}"
+    flip="-1" /> <!--flip mesh-->
+  
+  <!-- Rear Left (RL) -->
+  <xacro:wheel 
+    prefix="$(arg prefix)"
+    side="rear_left" 
+    parent_link="base_link"
+    x_offset="${-wheel_offset_x}"
+    y_offset="${wheel_offset_y}"
+    z_offset="${wheel_offset_z}"
+    flip="1"/> 
+
+  <xacro:lidar_sensor
+    prefix="$(arg prefix)"
+    parent="base_link"
+    frame_id="laser_frame"
+    xyz_offset="0.1 0 0.025"
+    rpy_offset="0 0 0"
+    mesh_xyz_offset="0 0 0"
+    mesh_rpy_offset="0 0 0"
+    topic_name="scan"/>
+
+  <xacro:imu_sensor
+    prefix="$(arg prefix)"
+    parent="base_link"
+    frame_id="imu"
+    xyz_offset="0.0 0 0.025"
+    rpy_offset="0 0 0"
+    update_rate="15.0"
+    topic_name="imu/data"/>
+
+  <!-- <xacro:include filename="$(find r5)/urdf/control/diff_drive_control_plugin.urdf.xacro" />
+  <xacro:load_diff_drive_control_plugin use_gazebo="$(arg use_gazebo)"/> -->
+
+  <!-- <xacro:include filename="$(find r5)/urdf/control/velocity_control_plugin.urdf.xacro" />
+  <xacro:load_velocity_control_plugin use_gazebo="$(arg use_gazebo)"/> -->
+
+  <xacro:include filename="$(find r5)/ros2_control/r5.ros2_control.urdf.xacro" />
+  <xacro:r5_ros2_control 
+    prefix="$(arg prefix)" name="DiffBot" use_mock_hardware="$(arg use_mock_hardware)"/>
+
+</robot>

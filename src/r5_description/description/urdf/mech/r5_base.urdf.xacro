@@ -1,0 +1,52 @@
+<?xml version="1.0"?>
+<robot xmlns:xacro="http://www.ros.org/wiki/xacro">
+<xacro:property name="base_length" value="0.380" />
+<xacro:property name="base_x_offset" value="${(centered_length - base_length) / 2}" />
+<xacro:property name="base_size_x" value="0.380" />
+<xacro:property name="base_size_y" value="0.18" />
+<xacro:property name="base_size_z" value="0.27" />
+<xacro:property name="base_mass" value="4.6" />
+
+<xacro:macro name="r5_base" params="prefix">
+    <link name="${prefix}base_footprint"/>
+    <link name="${prefix}base_link">
+        <visual>
+            <origin xyz="0 0 0" rpy="0 0 0"/>
+            <geometry>
+                <mesh filename="file://$(find r5)/meshes/r5_visual/chassis_legs.stl" scale="0.001 0.001 0.001"/> 
+            </geometry>
+            <material name="green">
+                <color rgba="0.2 1.0 0.2 1.0"/>
+            </material>
+        </visual>
+        <collision>
+            <geometry>
+                <box size="${base_size_x} ${base_size_y} ${base_size_z}"/>
+            </geometry>
+            <origin xyz="0 0 ${-base_size_z/2}" rpy="0 0 0"/>
+        </collision>
+        <inertial>
+            <origin xyz="0 0 0" rpy="0 0 0"/>
+            <mass value="${base_mass}"/>
+            <inertia
+                ixx="${(1/12) * base_mass * ((base_size_y * base_size_y) + (base_size_z * base_size_z))}" ixy="0.0" ixz="0.0"
+                iyy="${(1/12) * base_mass * ((base_size_x * base_size_x) + (base_size_z * base_size_z))}" iyz="0.0"
+                izz="${(1/12) * base_mass * ((base_size_x * base_size_x) + (base_size_y * base_size_y))}"/>
+        </inertial>
+    </link>
+    <gazebo reference="${prefix}base_link">
+        <visual>
+            <material>
+                <ambient>0 0.7 0 1</ambient>
+                <diffuse>0 0.7 0 1</diffuse>
+                <specular>0 0.7 0 1</specular>
+            </material>
+        </visual>
+    </gazebo>
+    <joint name="${prefix}base_joint" type="fixed">
+        <parent link="${prefix}base_footprint"/>
+        <child link="${prefix}base_link"/>
+        <origin xyz="0.0 0.0 0" rpy="0.0 0.0 0.0"/>
+    </joint>
+</xacro:macro>
+</robot>
