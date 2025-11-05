@@ -39,9 +39,19 @@ def generate_launch_description():
             description="Start robot with mock hardware mirroring command to its states.",
         )
     )
+    declared_arguments.append(
+        DeclareLaunchArgument(
+            "prefix",
+            default_value='""',
+            description="Prefix of the joint names, useful for \
+        multi-robot setup. If changed than also joint names in the controllers' configuration \
+        have to be updated.",
+        )
+    )
 
     # Initialize Arguments
     gui = LaunchConfiguration("gui")
+    prefix = LaunchConfiguration("prefix")
     use_mock_hardware = LaunchConfiguration("use_mock_hardware")
 
     # Get URDF via xacro
@@ -53,8 +63,8 @@ def generate_launch_description():
                 [FindPackageShare("r5"), "urdf", "r5.urdf.xacro"]
             ),
             " ",
-            "use_mock_hardware:=",
-            use_mock_hardware,
+            "prefix:=",
+            prefix,
         ]
     )
     robot_description = {"robot_description": robot_description_content}

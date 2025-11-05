@@ -8,11 +8,13 @@
   <xacro:arg name="robot_name" default="r5"/>
   <xacro:arg name="prefix" default=""/>
   <xacro:arg name="use_gazebo" default="false"/>
+  <xacro:arg name="use_mock_hardware" default="false" />
 
   <xacro:include filename="$(find r5)/urdf/sensors/lidar.urdf.xacro" />
   <xacro:include filename="$(find r5)/urdf/sensors/imu.urdf.xacro"/>
   <xacro:include filename="$(find r5)/urdf/mech/wheel.urdf.xacro"/>
   <xacro:include filename="$(find r5)/urdf/mech/r5_base.urdf.xacro"/>
+  <xacro:include filename="$(find r5)/ros2_control/r5.ros2_control.urdf.xacro" />
   
   <xacro:r5_base prefix="$(arg prefix)"/>
     
@@ -75,14 +77,7 @@
     update_rate="15.0"
     topic_name="imu/data"/>
 
-  <!-- <xacro:include filename="$(find r5)/urdf/control/diff_drive_control_plugin.urdf.xacro" />
-  <xacro:load_diff_drive_control_plugin use_gazebo="$(arg use_gazebo)"/> -->
-
-  <!-- <xacro:include filename="$(find r5)/urdf/control/velocity_control_plugin.urdf.xacro" />
-  <xacro:load_velocity_control_plugin use_gazebo="$(arg use_gazebo)"/> -->
-
-  <xacro:include filename="$(find r5)/ros2_control/r5.ros2_control.urdf.xacro" />
   <xacro:r5_ros2_control 
-    prefix="$(arg prefix)" name="DiffBot" use_mock_hardware="$(arg use_mock_hardware)"/>
+    name="$(arg robot_name)" prefix="$(arg prefix)"  use_mock_hardware="$(arg use_mock_hardware)"/>
 
 </robot>
