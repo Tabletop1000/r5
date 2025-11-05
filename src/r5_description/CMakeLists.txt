@@ -32,6 +32,7 @@ add_library(
   r5
   SHARED
   hardware/diffbot_system.cpp
+  hardware/serial_device.cpp
 )
 target_compile_features(r5 PUBLIC cxx_std_17)
 target_include_directories(r5 PUBLIC

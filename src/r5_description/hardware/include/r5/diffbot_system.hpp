@@ -18,6 +18,10 @@
 #include <memory>
 #include <string>
 #include <vector>
+#include <string>
+#include <sstream>
+#include <fcntl.h>
+#include <termios.h>
 
 #include "hardware_interface/handle.hpp"
 #include "hardware_interface/hardware_info.hpp"
@@ -29,6 +33,7 @@
 #include "rclcpp/time.hpp"
 #include "rclcpp_lifecycle/node_interfaces/lifecycle_node_interface.hpp"
 #include "rclcpp_lifecycle/state.hpp"
+#include "../../serial_device.hpp"
 
 namespace r5
 {
@@ -55,10 +60,17 @@ public:
   hardware_interface::return_type write(
     const rclcpp::Time & time, const rclcpp::Duration & period) override;
 
+  
+
 private:
   // Parameters for the DiffBot simulation
   double hw_start_sec_;
   double hw_stop_sec_;
+  int fd;
+  std::string port_name_;
+  speed_t buad_rate_;
+  SerialDevice motors_front_;
+  // SerialDevice motors_rear_("/dev/ttyACM1",B115200);
 };
 
 }  // namespace r5

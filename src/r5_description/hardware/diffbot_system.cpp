@@ -13,6 +13,7 @@
 // limitations under the License.
 
 #include "r5/diffbot_system.hpp"
+#include "serial_device.hpp"
 
 #include <chrono>
 #include <cmath>
@@ -99,16 +100,7 @@ hardware_interface::CallbackReturn DiffBotSystemHardware::on_init(
 hardware_interface::CallbackReturn DiffBotSystemHardware::on_configure(
   const rclcpp_lifecycle::State & /*previous_state*/)
 {
-  // BEGIN: This part here is for exemplary purposes - Please do not copy to your production code
-  RCLCPP_INFO(get_logger(), "Configuring ...please wait...");
-
-  for (int i = 0; i < hw_start_sec_; i++)
-  {
-    rclcpp::sleep_for(std::chrono::seconds(1));
-    RCLCPP_INFO(get_logger(), "%.1f seconds left...", hw_start_sec_ - i);
-  }
-  // END: This part here is for exemplary purposes - Please do not copy to your production code
-
+  motors_front_.init();
   // reset values always when configuring hardware
   for (const auto & [name, descr] : joint_state_interfaces_)
   {
@@ -150,15 +142,6 @@ hardware_interface::CallbackReturn DiffBotSystemHardware::on_activate(
 hardware_interface::CallbackReturn DiffBotSystemHardware::on_deactivate(
   const rclcpp_lifecycle::State & /*previous_state*/)
 {
-  // BEGIN: This part here is for exemplary purposes - Please do not copy to your production code
-  RCLCPP_INFO(get_logger(), "Deactivating ...please wait...");
-
-  for (auto i = 0; i < hw_stop_sec_; i++)
-  {
-    rclcpp::sleep_for(std::chrono::seconds(1));
-    RCLCPP_INFO(get_logger(), "%.1f seconds left...", hw_stop_sec_ - i);
-  }
-  // END: This part here is for exemplary purposes - Please do not copy to your production code
 
   RCLCPP_INFO(get_logger(), "Successfully deactivated!");
 
@@ -168,27 +151,14 @@ hardware_interface::CallbackReturn DiffBotSystemHardware::on_deactivate(
 hardware_interface::return_type DiffBotSystemHardware::read(
   const rclcpp::Time & /*time*/, const rclcpp::Duration & period)
 {
-  // BEGIN: This part here is for exemplary purposes - Please do not copy to your production code
-  std::stringstream ss;
-  ss << "Reading states:";
-  ss << std::fixed << std::setprecision(2);
-  for (const auto & [name, descr] : joint_state_interfaces_)
-  {
-    if (descr.get_interface_name() == hardware_interface::HW_IF_POSITION)
-    {
-      // Simulate DiffBot wheels's movement as a first-order system
-      // Update the joint status: this is a revolute joint without any limit.
-      // Simply integrates
-      auto velo = get_command(descr.get_prefix_name() + "/" + hardware_interface::HW_IF_VELOCITY);
-      set_state(name, get_state(name) + period.seconds() * velo);
 
-      ss << std::endl
-         << "\t position " << get_state(name) << " and velocity " << velo << " for '" << name
-         << "'!";
-    }
+  float vel_front_right = 0.0;
+  float vel_front_left = 0.0;
+  if(motors_front_.readData((vel_front_right), (vel_front_left)))
+  {
+    set_state("front_right_wheel_joint/velocity",static_cast<double>(vel_front_right));
+    set_state("front_left_joint/velocity",static_cast<double>(vel_front_left));
   }
-  RCLCPP_INFO_THROTTLE(get_logger(), *get_clock(), 500, "%s", ss.str().c_str());
-  // END: This part here is for exemplary purposes - Please do not copy to your production code
 
   return hardware_interface::return_type::OK;
 }
