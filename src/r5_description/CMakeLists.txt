@@ -34,6 +34,13 @@ add_library(
   hardware/diffbot_system.cpp
   hardware/serial_device.cpp
 )
+
+add_executable(
+  motornode_console
+  hardware/motornode_console.cpp
+  hardware/serial_device.cpp
+)
+
 target_compile_features(r5 PUBLIC cxx_std_17)
 target_include_directories(r5 PUBLIC
 $<BUILD_INTERFACE:${PROJECT_SOURCE_DIR}/hardware/include>
@@ -67,7 +74,7 @@ install(
   DIRECTORY bringup/launch bringup/config
   DESTINATION share/r5
 )
-install(TARGETS r5
+install(TARGETS r5 motornode_console
   EXPORT export_r5
   ARCHIVE DESTINATION lib
   LIBRARY DESTINATION lib

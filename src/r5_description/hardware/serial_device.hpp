@@ -11,12 +11,12 @@ private:
     speed_t baudRate;       // e.g., B115200
 
 public:
-    SerialDevice(const std::string& port = "/dev/ttyUSB0", speed_t baud = B115200);
+    SerialDevice();
     ~SerialDevice();
 
-    bool init();
+    bool init(const std::string& port, speed_t baud);
     bool writeData(float val1, float val2);
-    bool readData(float& val1, float& val2);
+    bool readData(float& val1, float& val2, float& val3, float& val4);
 };
 
 #endif // SERIALDEVICE_HPP

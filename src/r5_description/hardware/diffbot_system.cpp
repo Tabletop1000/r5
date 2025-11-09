@@ -100,7 +100,7 @@ hardware_interface::CallbackReturn DiffBotSystemHardware::on_init(
 hardware_interface::CallbackReturn DiffBotSystemHardware::on_configure(
   const rclcpp_lifecycle::State & /*previous_state*/)
 {
-  motors_front_.init();
+  motors_front_.init("/dev/ttyACM0", B115200);
   // reset values always when configuring hardware
   for (const auto & [name, descr] : joint_state_interfaces_)
   {
@@ -118,15 +118,7 @@ hardware_interface::CallbackReturn DiffBotSystemHardware::on_configure(
 hardware_interface::CallbackReturn DiffBotSystemHardware::on_activate(
   const rclcpp_lifecycle::State & /*previous_state*/)
 {
-  // BEGIN: This part here is for exemplary purposes - Please do not copy to your production code
   RCLCPP_INFO(get_logger(), "Activating ...please wait...");
-
-  for (auto i = 0; i < hw_start_sec_; i++)
-  {
-    rclcpp::sleep_for(std::chrono::seconds(1));
-    RCLCPP_INFO(get_logger(), "%.1f seconds left...", hw_start_sec_ - i);
-  }
-  // END: This part here is for exemplary purposes - Please do not copy to your production code
 
   // command and state should be equal when starting
   for (const auto & [name, descr] : joint_command_interfaces_)
@@ -154,10 +146,19 @@ hardware_interface::return_type DiffBotSystemHardware::read(
 
   float vel_front_right = 0.0;
   float vel_front_left = 0.0;
-  if(motors_front_.readData((vel_front_right), (vel_front_left)))
+  float pos_front_right = 0.0;
+  float pos_front_left = 0.0;
+  if(motors_front_.readData((vel_front_right), (vel_front_left), (pos_front_right), (pos_front_left)))
   {
     set_state("front_right_wheel_joint/velocity",static_cast<double>(vel_front_right));
-    set_state("front_left_joint/velocity",static_cast<double>(vel_front_left));
+    set_state("front_left_wheel_joint/velocity",static_cast<double>(vel_front_left));
+    set_state("rear_right_wheel_joint/velocity",static_cast<double>(vel_front_right));
+    set_state("rear_left_wheel_joint/velocity",static_cast<double>(vel_front_left));
+
+    set_state("front_right_wheel_joint/position", static_cast<double>(pos_front_right));
+    set_state("front_left_wheel_joint/position", static_cast<double>(pos_front_left));
+    set_state("rear_right_wheel_joint/position", static_cast<double>(pos_front_right));
+    set_state("rear_left_wheel_joint/position", static_cast<double>(pos_front_left));
   }
 
   return hardware_interface::return_type::OK;
@@ -166,19 +167,11 @@ hardware_interface::return_type DiffBotSystemHardware::read(
 hardware_interface::return_type r5 ::DiffBotSystemHardware::write(
   const rclcpp::Time & /*time*/, const rclcpp::Duration & /*period*/)
 {
-  // BEGIN: This part here is for exemplary purposes - Please do not copy to your production code
-  std::stringstream ss;
-  ss << "Writing commands:";
-  for (const auto & [name, descr] : joint_command_interfaces_)
-  {
-    // Simulate sending commands to the hardware
-    set_state(name, get_command(name));
 
-    ss << std::fixed << std::setprecision(2) << std::endl
-       << "\t" << "command " << get_command(name) << " for '" << name << "'!";
-  }
-  RCLCPP_INFO_THROTTLE(get_logger(), *get_clock(), 500, "%s", ss.str().c_str());
-  // END: This part here is for exemplary purposes - Please do not copy to your production code
+  float vel_front_right = static_cast<float>(get_command("front_right_wheel_joint/velocity"));
+  float vel_front_left = static_cast<float>(get_command("front_left_wheel_joint/velocity"));
+
+  motors_front_.writeData(vel_front_right,vel_front_left);
 
   return hardware_interface::return_type::OK;
 }

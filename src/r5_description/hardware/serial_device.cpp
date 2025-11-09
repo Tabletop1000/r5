@@ -10,14 +10,16 @@
 #include <algorithm>
 
 
-SerialDevice::SerialDevice(const std::string& port, speed_t baud)
-    : fd(-1), portName(port), baudRate(baud) {}
+SerialDevice::SerialDevice()
+    : fd(-1) {}
 
 SerialDevice::~SerialDevice() {
     if (fd != -1) close(fd);
 }
 
-bool SerialDevice::init() {
+bool SerialDevice::init(const std::string& port, speed_t baud) {
+    portName = port;
+    baudRate = baud;
     fd = open(portName.c_str(), O_RDWR | O_NOCTTY | O_SYNC);
     if (fd < 0) {
         std::cerr << "Error opening serial port " << portName << ": " << strerror(errno) << std::endl;
@@ -69,7 +71,7 @@ bool SerialDevice::writeData(float val1, float val2) {
     return true;
 }
 
-bool SerialDevice::readData(float& val1, float& val2) {
+bool SerialDevice::readData(float& val1, float& val2, float& val3, float& val4) {
     if (fd == -1) return false;
 
     char buf[256];
@@ -78,18 +80,21 @@ bool SerialDevice::readData(float& val1, float& val2) {
 
     buf[n] = '\0';
     std::string data(buf);
+    sscanf(data.c_str(),"%f:%f:%f:%f",&val1,&val2,&val3,&val4);
 
-    // Parse "<float>:<float>"
-    std::replace(data.begin(), data.end(), '\n', '\0');
-    size_t sep = data.find(':');
-    if (sep == std::string::npos) return false;
+    // // Parse "<float>:<float>"
+    // std::replace(data.begin(), data.end(), '\n', '\0');
+    // size_t sep = data.find(':');
+    // if (sep == std::string::npos) return false;
 
-    try {
-        val1 = std::stof(data.substr(0, sep));
-        val2 = std::stof(data.substr(sep + 1));
-    } catch (...) {
-        return false;
-    }
+    // try {
+    //     val1 = std::stof(data.substr(0, sep));
+    //     val2 = std::stof(data.substr(sep + 1));
+    //     val3 = std::stof(data.substr(sep + 2));
+    //     val4 = std::stof(data.substr(sep + 4));
+    // } catch (...) {
+    //     return false;
+    // }
 
     return true;
 }
