@@ -70,7 +70,7 @@ private:
   std::string port_name_;
   speed_t buad_rate_;
   SerialDevice motors_front_;
-  // SerialDevice motors_rear_("/dev/ttyACM1",B115200);
+  SerialDevice motors_rear_;
 };
 
 }  // namespace r5

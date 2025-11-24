@@ -101,6 +101,7 @@ hardware_interface::CallbackReturn DiffBotSystemHardware::on_configure(
   const rclcpp_lifecycle::State & /*previous_state*/)
 {
   motors_front_.init("/dev/ttyACM0", B115200);
+  motors_rear_.init("/dev/ttyACM1", B115200);
   // reset values always when configuring hardware
   for (const auto & [name, descr] : joint_state_interfaces_)
   {
@@ -146,19 +147,26 @@ hardware_interface::return_type DiffBotSystemHardware::read(
 
   float vel_front_right = 0.0;
   float vel_front_left = 0.0;
+  float vel_rear_right = 0.0;
+  float vel_rear_left = 0.0;
   float pos_front_right = 0.0;
   float pos_front_left = 0.0;
+  float pos_rear_right = 0.0;
+  float pos_rear_left = 0.0;
+
   if(motors_front_.readData((vel_front_right), (vel_front_left), (pos_front_right), (pos_front_left)))
   {
     set_state("front_right_wheel_joint/velocity",static_cast<double>(vel_front_right));
     set_state("front_left_wheel_joint/velocity",static_cast<double>(vel_front_left));
-    set_state("rear_right_wheel_joint/velocity",static_cast<double>(vel_front_right));
-    set_state("rear_left_wheel_joint/velocity",static_cast<double>(vel_front_left));
-
     set_state("front_right_wheel_joint/position", static_cast<double>(pos_front_right));
     set_state("front_left_wheel_joint/position", static_cast<double>(pos_front_left));
-    set_state("rear_right_wheel_joint/position", static_cast<double>(pos_front_right));
-    set_state("rear_left_wheel_joint/position", static_cast<double>(pos_front_left));
+  }
+  if(motors_rear_.readData((vel_rear_right), (vel_rear_left), (pos_rear_right), (pos_rear_left)))
+  {
+    set_state("rear_right_wheel_joint/velocity",static_cast<double>(vel_rear_right));
+    set_state("rear_left_wheel_joint/velocity",static_cast<double>(vel_rear_left));
+    set_state("rear_right_wheel_joint/position", static_cast<double>(pos_rear_right));
+    set_state("rear_left_wheel_joint/position", static_cast<double>(pos_rear_left));
   }
 
   return hardware_interface::return_type::OK;
@@ -170,8 +178,11 @@ hardware_interface::return_type r5 ::DiffBotSystemHardware::write(
 
   float vel_front_right = static_cast<float>(get_command("front_right_wheel_joint/velocity"));
   float vel_front_left = static_cast<float>(get_command("front_left_wheel_joint/velocity"));
+  float vel_rear_right = static_cast<float>(get_command("rear_right_wheel_joint/velocity"));
+  float vel_rear_left = static_cast<float>(get_command("rear_left_wheel_joint/velocity"));
 
   motors_front_.writeData(vel_front_right,vel_front_left);
+  motors_rear_.writeData(vel_rear_right,vel_rear_left);
 
   return hardware_interface::return_type::OK;
 }
