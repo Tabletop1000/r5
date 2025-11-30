@@ -100,8 +100,8 @@ hardware_interface::CallbackReturn DiffBotSystemHardware::on_init(
 hardware_interface::CallbackReturn DiffBotSystemHardware::on_configure(
   const rclcpp_lifecycle::State & /*previous_state*/)
 {
-  motors_front_.init("/dev/ttyACM0", B115200);
-  motors_rear_.init("/dev/ttyACM1", B115200);
+  motors_front_.init("/dev/ttyMotornodeFront", B115200);
+  motors_rear_.init("/dev/ttyMotornodeRear", B115200);
   // reset values always when configuring hardware
   for (const auto & [name, descr] : joint_state_interfaces_)
   {
