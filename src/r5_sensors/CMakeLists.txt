@@ -10,7 +10,6 @@ find_package(ament_cmake REQUIRED)
 # uncomment the following section in order to fill in
 # further dependencies manually.
 find_package(ublox REQUIRED)
-find_package(bno055 REQUIRED)
 
 install(
   DIRECTORY
