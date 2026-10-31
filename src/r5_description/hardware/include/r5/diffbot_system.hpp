@@ -18,10 +18,6 @@
 #include <memory>
 #include <string>
 #include <vector>
-#include <string>
-#include <sstream>
-#include <fcntl.h>
-#include <termios.h>
 
 #include "hardware_interface/handle.hpp"
 #include "hardware_interface/hardware_info.hpp"
@@ -54,21 +50,18 @@ public:
   hardware_interface::CallbackReturn on_deactivate(
     const rclcpp_lifecycle::State & previous_state) override;
 
+  hardware_interface::CallbackReturn on_shutdown(
+    const rclcpp_lifecycle::State & previous_state) override;
+
   hardware_interface::return_type read(
     const rclcpp::Time & time, const rclcpp::Duration & period) override;
 
   hardware_interface::return_type write(
     const rclcpp::Time & time, const rclcpp::Duration & period) override;
 
-  
-
 private:
-  // Parameters for the DiffBot simulation
-  double hw_start_sec_;
-  double hw_stop_sec_;
-  int fd;
-  std::string port_name_;
-  speed_t buad_rate_;
+  void stop_motors();
+
   SerialDevice motors_front_;
   SerialDevice motors_rear_;
 };

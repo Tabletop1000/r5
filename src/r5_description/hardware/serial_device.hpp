@@ -9,6 +9,7 @@ private:
     int fd;                 // File descriptor for the serial port
     std::string portName;   // e.g., "/dev/ttyUSB0"
     speed_t baudRate;       // e.g., B115200
+    std::string rxBuffer;   // Received bytes not yet ending in a newline
 
 public:
     SerialDevice();

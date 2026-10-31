@@ -3,12 +3,9 @@
 <package format="3">
   <name>r5</name>
   <version>0.0.0</version>
-  <description>Demo package of `ros2_control` hardware for DiffBot.</description>
+  <description>Description, ros2_control hardware interface and bringup for the R5 skid-steer robot.</description>
 
-  <maintainer email="denis.stogl@stoglrobotics.de">Dr.-Ing. Denis Štogl</maintainer>
-  <maintainer email="bence.magyar.robotics@gmail.com">Bence Magyar</maintainer>
-  <maintainer email="christoph.froehlich@ait.ac.at">Christoph Froehlich</maintainer>
-  <maintainer email="sai.kishor@pal-robotics.com">Sai Kishor Kothakota</maintainer>
+  <maintainer email="jadondutra@gmail.com">Jadon Dutra</maintainer>
 
   <license>Apache-2.0</license>
 

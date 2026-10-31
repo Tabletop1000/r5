@@ -57,7 +57,7 @@ def generate_test_description():
                 "launch/diffbot.launch.py",
             )
         ),
-        launch_arguments={"gui": "False"}.items(),
+        launch_arguments={"gui": "False", "use_mock_hardware": "true"}.items(),
     )
 
     return LaunchDescription([launch_include, ReadyToTest()])
@@ -90,7 +90,15 @@ class TestFixture(unittest.TestCase):
         check_controllers_running(self.node, cnames)
 
     def test_check_if_msgs_published(self):
-        check_if_js_published("/joint_states", ["left_wheel_joint", "right_wheel_joint"])
+        check_if_js_published(
+            "/joint_states",
+            [
+                "front_left_wheel_joint",
+                "front_right_wheel_joint",
+                "rear_left_wheel_joint",
+                "rear_right_wheel_joint",
+            ],
+        )
 
 
 @launch_testing.post_shutdown_test()

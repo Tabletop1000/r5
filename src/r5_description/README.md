@@ -1,6 +1,33 @@
-# ros2_control_demo_example_2
+# r5
 
-   *DiffBot*, or ''Differential Mobile Robot'', is a simple mobile base with differential drive.
-   The robot is basically a box moving according to differential drive kinematics.
+Robot description, ros2_control hardware interface and controller config for R5, a four-wheel
+skid-steer robot. Based on the ros2_control DiffBot demo (`example_2`).
 
-Find the documentation in [doc/userdoc.rst](doc/userdoc.rst) or on [control.ros.org](https://control.ros.org/master/doc/ros2_control_demos/example_2/doc/userdoc.html).
+The two motor nodes connect over serial as `/dev/ttyMotornodeFront` and `/dev/ttyMotornodeRear`,
+named by udev rules on the robot.
+
+## Usage
+
+Start the robot and sensors from `r5_bringup`:
+
+```bash
+ros2 launch r5_bringup r5.launch.py
+```
+
+Start only the base, optionally with RViz or without any hardware attached:
+
+```bash
+ros2 launch r5 diffbot.launch.py gui:=true use_mock_hardware:=true
+```
+
+View the robot model:
+
+```bash
+ros2 launch r5 view_robot.launch.py
+```
+
+Read a motor node directly:
+
+```bash
+ros2 run r5 motornode_console /dev/ttyMotornodeFront
+```

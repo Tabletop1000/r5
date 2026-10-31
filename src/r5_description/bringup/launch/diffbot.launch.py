@@ -65,6 +65,9 @@ def generate_launch_description():
             " ",
             "prefix:=",
             prefix,
+            " ",
+            "use_mock_hardware:=",
+            use_mock_hardware,
         ]
     )
     robot_description = {"robot_description": robot_description_content}

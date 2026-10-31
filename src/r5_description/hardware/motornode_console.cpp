@@ -17,13 +17,18 @@ int main(int argc, char* argv[])
     }
 
     SerialDevice motor;
-    motor.init(argv[1],B115200);
+    if(!motor.init(argv[1],B115200))
+    {
+        return EXIT_FAILURE;
+    }
     float v1,v2,p1,p2;
     while(1)
     {
-
-        motor.readData(v1,v2,p1,p2);
-        cout << "V1: " << v1 << " V2: " << v2 << "P1: " << p1 << "P2: " << p2 <<endl;
+        if(motor.readData(v1,v2,p1,p2))
+        {
+            cout << "V1: " << v1 << " V2: " << v2 << " P1: " << p1 << " P2: " << p2 <<endl;
+        }
+        std::this_thread::sleep_for(10ms);
     }
     return 0;
 }

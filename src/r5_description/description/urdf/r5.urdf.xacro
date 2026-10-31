@@ -19,9 +19,9 @@
   
   <xacro:r5_base prefix="$(arg prefix)"/>
     
-  <!-- Front Right (FR) -->
-  <xacro:wheel 
-    prefix="$(arg prefix)" 
+  <!-- Front Left (FL) -->
+  <xacro:wheel
+    prefix="$(arg prefix)"
     side="front_left"
     parent_link="base_link"
     x_offset="${wheel_offset_x}"
@@ -29,8 +29,8 @@
     z_offset="${wheel_offset_z}"
     flip="1" /> <!--flip mesh-->
   
-  <!-- Front Left (FL) -->
-  <xacro:wheel 
+  <!-- Front Right (FR) -->
+  <xacro:wheel
     prefix="$(arg prefix)"
     side="front_right"
     parent_link="base_link"

@@ -24,7 +24,6 @@
 #include <sstream>
 #include <vector>
 
-#include "hardware_interface/lexical_casts.hpp"
 #include "hardware_interface/types/hardware_interface_type_values.hpp"
 #include "rclcpp/rclcpp.hpp"
 
@@ -39,13 +38,6 @@ hardware_interface::CallbackReturn DiffBotSystemHardware::on_init(
   {
     return hardware_interface::CallbackReturn::ERROR;
   }
-
-  // BEGIN: This part here is for exemplary purposes - Please do not copy to your production code
-  hw_start_sec_ =
-    hardware_interface::stod(info_.hardware_parameters["example_param_hw_start_duration_sec"]);
-  hw_stop_sec_ =
-    hardware_interface::stod(info_.hardware_parameters["example_param_hw_stop_duration_sec"]);
-  // END: This part here is for exemplary purposes - Please do not copy to your production code
 
   for (const hardware_interface::ComponentInfo & joint : info_.joints)
   {
@@ -100,8 +92,16 @@ hardware_interface::CallbackReturn DiffBotSystemHardware::on_init(
 hardware_interface::CallbackReturn DiffBotSystemHardware::on_configure(
   const rclcpp_lifecycle::State & /*previous_state*/)
 {
-  motors_front_.init("/dev/ttyMotornodeFront", B115200);
-  motors_rear_.init("/dev/ttyMotornodeRear", B115200);
+  if (!motors_front_.init("/dev/ttyMotornodeFront", B115200))
+  {
+    RCLCPP_FATAL(get_logger(), "Failed to open front motor node.");
+    return hardware_interface::CallbackReturn::ERROR;
+  }
+  if (!motors_rear_.init("/dev/ttyMotornodeRear", B115200))
+  {
+    RCLCPP_FATAL(get_logger(), "Failed to open rear motor node.");
+    return hardware_interface::CallbackReturn::ERROR;
+  }
   // reset values always when configuring hardware
   for (const auto & [name, descr] : joint_state_interfaces_)
   {
@@ -135,14 +135,33 @@ hardware_interface::CallbackReturn DiffBotSystemHardware::on_activate(
 hardware_interface::CallbackReturn DiffBotSystemHardware::on_deactivate(
   const rclcpp_lifecycle::State & /*previous_state*/)
 {
+  stop_motors();
 
   RCLCPP_INFO(get_logger(), "Successfully deactivated!");
 
   return hardware_interface::CallbackReturn::SUCCESS;
 }
 
+hardware_interface::CallbackReturn DiffBotSystemHardware::on_shutdown(
+  const rclcpp_lifecycle::State & /*previous_state*/)
+{
+  stop_motors();
+
+  return hardware_interface::CallbackReturn::SUCCESS;
+}
+
+void DiffBotSystemHardware::stop_motors()
+{
+  const bool front_stopped = motors_front_.writeData(0.0f, 0.0f);
+  const bool rear_stopped = motors_rear_.writeData(0.0f, 0.0f);
+  if (!front_stopped || !rear_stopped)
+  {
+    RCLCPP_ERROR(get_logger(), "Failed to send stop command to motor nodes.");
+  }
+}
+
 hardware_interface::return_type DiffBotSystemHardware::read(
-  const rclcpp::Time & /*time*/, const rclcpp::Duration & period)
+  const rclcpp::Time & /*time*/, const rclcpp::Duration & /*period*/)
 {
 
   float vel_front_right = 0.0;
