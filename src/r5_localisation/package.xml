@@ -3,7 +3,7 @@
 <package format="3">
   <name>r5_localisation</name>
   <version>0.0.0</version>
-  <description>TODO: Package description</description>
+  <description>Fuses wheel odometry, IMU and GPS into the odom and map frames for R5.</description>
   <maintainer email="jadondutra@gmail.com">jdutra</maintainer>
   <license>TODO: License declaration</license>
 
