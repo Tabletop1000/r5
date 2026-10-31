@@ -30,7 +30,7 @@
 # ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
 # POSSIBILITY OF SUCH DAMAGE.
 
-"""Launch the ublox gps node with c94-m8p configuration."""
+"""Launch the ublox gps node with m9n configuration."""
 
 import os
 
@@ -41,20 +41,12 @@ import launch_ros.actions
 
 def generate_launch_description():
     config_directory = os.path.join(
-        ament_index_python.packages.get_package_share_directory('ublox_gps'),
+        ament_index_python.packages.get_package_share_directory('r5_sensors'),
         'config')
-    params = os.path.join(config_directory, 'c94_m8p_rover.yaml')
+    params = os.path.join(config_directory, 'm9n.yaml')
     ublox_gps_node = launch_ros.actions.Node(package='ublox_gps',
                                              executable='ublox_gps_node',
                                              output='both',
                                              parameters=[params])
 
-    return launch.LaunchDescription([ublox_gps_node,
-
-                                     launch.actions.RegisterEventHandler(
-                                         event_handler=launch.event_handlers.OnProcessExit(
-                                             target_action=ublox_gps_node,
-                                             on_exit=[launch.actions.EmitEvent(
-                                                 event=launch.events.Shutdown())],
-                                         )),
-                                     ])
+    return launch.LaunchDescription([ublox_gps_node])
