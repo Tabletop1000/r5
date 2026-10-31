@@ -191,6 +191,20 @@ To read a motor node directly, stop the launch first, because only one program c
 ros2 run r5 motornode_console /dev/ttyMotornodeFront
 ```
 
+## Viewing the robot in RViz
+
+With `r5.launch.py` running on the robot, run this in the container:
+
+```bash
+rviz2 -d install/r5/share/r5/rviz/r5.rviz
+```
+
+After changing `r5.rviz`, run `colcon build --packages-select r5` so the installed copy updates.
+
+The camera follows `base_footprint`, so the robot stays in view and the grid moves past it. The fixed
+frame is `odom`, which works without GPS. To see the GPS-corrected position instead, set
+**Global Options > Fixed Frame** to `map`.
+
 ## Driving with teleop
 
 The controller only accepts `TwistStamped`, so teleop needs these flags. Without them the robot
