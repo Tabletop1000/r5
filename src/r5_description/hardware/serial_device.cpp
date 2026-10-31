@@ -1,4 +1,5 @@
 #include "serial_device.hpp"
+#include <iomanip>
 #include <iostream>
 #include <string>
 #include <sstream>
@@ -69,7 +70,9 @@ bool SerialDevice::init(const std::string& port, speed_t baud) {
 bool SerialDevice::writeData(float val1, float val2) {
     if (fd == -1) return false;
     std::ostringstream oss;
-    oss << val1 << ":" << val2 << "\n";  // Append newline as message terminator
+    // Fixed width because the motor node ignores messages of 5 bytes or fewer, such as "0:0\n"
+    oss << std::fixed << std::setprecision(3)
+        << val1 << ":" << val2 << "\n";  // Append newline as message terminator
     std::string msg = oss.str();
 
     ssize_t bytesWritten = write(fd, msg.c_str(), msg.size());

@@ -9,7 +9,9 @@ ublox_gps_node:
     fix_mode: 3d
 
     gnss:
-      glanass: true
+      glonass: true
+      galileo: true
+      sbas: true
       beidou: true
       qzss: true
     uart1:
