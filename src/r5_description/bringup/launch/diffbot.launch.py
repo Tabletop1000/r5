@@ -48,11 +48,19 @@ def generate_launch_description():
         have to be updated.",
         )
     )
+    declared_arguments.append(
+            DeclareLaunchArgument(
+                "use_rviz",
+                default_value="false",
+                description="If true, will launch rviz node",
+                )
+            )
 
     # Initialize Arguments
     gui = LaunchConfiguration("gui")
     prefix = LaunchConfiguration("prefix")
     use_mock_hardware = LaunchConfiguration("use_mock_hardware")
+    use_rviz = LaunchConfiguration("use_rviz")
 
     # Get URDF via xacro
     robot_description_content = Command(
@@ -92,13 +100,14 @@ def generate_launch_description():
         output="both",
         parameters=[robot_description],
     )
-    rviz_node = Node(
-        package="rviz2",
-        executable="rviz2",
-        name="rviz2",
-        output="log",
-        arguments=["-d", rviz_config_file],
-        condition=IfCondition(gui),
+    if(use_rviz=="true"):
+        rviz_node = Node(
+         package="rviz2",
+         executable="rviz2",
+         name="rviz2",
+         output="log",
+         arguments=["-d", rviz_config_file],
+         condition=IfCondition(gui),
     )
 
     joint_state_broadcaster_spawner = Node(
@@ -120,12 +129,13 @@ def generate_launch_description():
     )
 
     # Delay rviz start after `joint_state_broadcaster`
-    delay_rviz_after_joint_state_broadcaster_spawner = RegisterEventHandler(
-        event_handler=OnProcessExit(
-            target_action=joint_state_broadcaster_spawner,
-            on_exit=[rviz_node],
-        )
-    )
+    if(use_rviz=="ture"):
+     delay_rviz_after_joint_state_broadcaster_spawner = RegisterEventHandler(
+            event_handler=OnProcessExit(
+                target_action=joint_state_broadcaster_spawner,
+             on_exit=[rviz_node],
+         )
+     )
 
     # Delay start of joint_state_broadcaster after `robot_controller`
     # TODO(anyone): This is a workaround for flaky tests. Remove when fixed.
@@ -140,7 +150,7 @@ def generate_launch_description():
         control_node,
         robot_state_pub_node,
         robot_controller_spawner,
-        delay_rviz_after_joint_state_broadcaster_spawner,
+        #delay_rviz_after_joint_state_broadcaster_spawner,
         delay_joint_state_broadcaster_after_robot_controller_spawner,
     ]
 

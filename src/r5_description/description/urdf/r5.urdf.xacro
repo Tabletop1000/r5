@@ -77,6 +77,15 @@
     update_rate="15.0"
     topic_name="imu/data"/>
 
+  <xacro:gps_sensor
+    prefix="$(arg prefix)"
+    parent="base_link"
+    frame_id="imu"
+    xyz_offset="0.0 0 0.030"
+    rpy_offset="0 0 0"
+    update_rate="1.0"
+    topic_name="gps/data"/>
+
   <xacro:r5_ros2_control 
     name="$(arg robot_name)" prefix="$(arg prefix)"  use_mock_hardware="$(arg use_mock_hardware)"/>
 
