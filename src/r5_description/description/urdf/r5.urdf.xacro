@@ -12,6 +12,7 @@
 
   <xacro:include filename="$(find r5)/urdf/sensors/lidar.urdf.xacro" />
   <xacro:include filename="$(find r5)/urdf/sensors/imu.urdf.xacro"/>
+  <xacro:include filename="$(find r5)/urdf/sensors/gps.urdf.xacro"/>
   <xacro:include filename="$(find r5)/urdf/mech/wheel.urdf.xacro"/>
   <xacro:include filename="$(find r5)/urdf/mech/r5_base.urdf.xacro"/>
   <xacro:include filename="$(find r5)/ros2_control/r5.ros2_control.urdf.xacro" />
@@ -80,7 +81,7 @@
   <xacro:gps_sensor
     prefix="$(arg prefix)"
     parent="base_link"
-    frame_id="imu"
+    frame_id="gps"
     xyz_offset="0.0 0 0.030"
     rpy_offset="0 0 0"
     update_rate="1.0"

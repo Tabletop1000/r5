@@ -3,7 +3,7 @@ ublox_gps_node:
   ros__parameters:
     debug: 0                    # Range 0-4 (0 means no debug statements will print)
     device: /dev/ttyACM0
-    frame_id: gps
+    frame_id: gps_link
     rate: 1.0
     nav_rate: 1
     fix_mode: 3d
