@@ -1,7 +1,9 @@
 # ROS 2 Jazzy for the laptop: RViz and tools, plus what's needed to build and test r5.
 # See doc/development.md.
 FROM osrf/ros:jazzy-desktop
-RUN apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
+# Upgrade first, because ROS packages from different dates can crash with symbol errors.
+RUN apt-get update && DEBIAN_FRONTEND=noninteractive apt-get upgrade -y \
+    && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
     dnsutils \
     iperf3 \
     iproute2 \
@@ -16,6 +18,7 @@ RUN apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-ins
     ros-jazzy-backward-ros \
     ros-jazzy-controller-manager \
     ros-jazzy-diff-drive-controller \
+    ros-jazzy-gz-ros2-control \
     ros-jazzy-hardware-interface \
     ros-jazzy-joint-state-broadcaster \
     ros-jazzy-joint-state-publisher-gui \
@@ -32,6 +35,8 @@ RUN apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-ins
     ros-jazzy-ros2-control-cmake \
     ros-jazzy-ros2controlcli \
     ros-jazzy-robot-localization \
+    ros-jazzy-ros-gz-bridge \
+    ros-jazzy-ros-gz-sim \
     ros-jazzy-teleop-twist-keyboard \
     ros-jazzy-xacro \
     && rm -rf /var/lib/apt/lists/*

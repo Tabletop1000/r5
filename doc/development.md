@@ -58,6 +58,11 @@ finds the meshes when the repository is at the same path.
 The container runs as root, so `build/`, `install/` and `log/` end up owned by root. Git ignores
 them, but deleting them from the host needs `sudo`.
 
+### Open another terminal in the same container
+Get the ID of the running container with `docker ps`.
+Open a second terminal and run 
+`docker exec -it <container id>`
+
 ### Connect to the robot
 
 Fedora's firewall can block ROS discovery. Allow the robot's address, which trusts all traffic
@@ -137,6 +142,13 @@ source install/setup.bash
 A new container needs the `source` step again. The sensor drivers aren't in the image, so the sensor
 launch files only run on the robot.
 
+After rebuilding the Docker image, clear the old build first. Its files point at libraries from the
+previous image, so `colcon build` fails with `No rule to make target '/opt/ros/jazzy/lib/...'`:
+
+```bash
+rm -rf build install log
+```
+
 ## Testing
 
 The launch test uses mock hardware, so no robot is needed:
@@ -162,6 +174,12 @@ To view the robot model:
 ```bash
 ros2 launch r5 view_robot.launch.py
 ```
+
+To use RVIZ in the simulator:
+```bash
+rviz2 -d install/r5/share/r5/rviz/r5.rviz --ros-args -p use_sim_time:=true
+```
+
 
 ## Running on the robot
 
@@ -223,3 +241,49 @@ Hold a key down to keep moving, because the controller stops after 0.5 s without
 run teleop from the laptop, the two clocks must agree to within that 0.5 s, or commands are rejected.
 
 Keep the wheels off the ground for the first run after any change to the hardware interface.
+
+## Simulation
+
+`r5_simulation` runs the robot in Gazebo Harmonic on the laptop, with the real localisation and Nav2
+launch files. Gazebo stands in for the motors, IMU and GPS.
+
+The container shares the laptop's network, so a simulation on the robot's `ROS_DOMAIN_ID` can send
+`/cmd_vel` and goals to the real robot. Use a different domain in every terminal for the simulation:
+
+```bash
+export ROS_DOMAIN_ID=42
+```
+
+Build, then start the simulation:
+
+```bash
+colcon build
+source install/setup.bash
+ros2 launch r5_simulation simulation.launch.py
+```
+
+Add `headless:=true` to run it without the Gazebo window. The robot starts at the world origin facing
+east, and Nav2 is ready when the log shows `Managed nodes are active`.
+
+Send a goal from a second terminal, in the same domain:
+
+```bash
+source install/setup.bash
+ros2 action send_goal --feedback /navigate_to_pose nav2_msgs/action/NavigateToPose \
+  "{pose: {header: {frame_id: base_footprint}, pose: {position: {x: 8.0, y: 0.0}, orientation: {w: 1.0}}}}"
+```
+
+To watch it in RViz, use simulated time and set **Global Options > Fixed Frame** to `map`:
+
+```bash
+rviz2 -d install/r5/share/r5/rviz/r5.rviz --ros-args -p use_sim_time:=true
+```
+
+To drive with teleop, add `-p use_sim_time:=true` to the teleop flags above, or commands are rejected.
+
+The simulation doesn't model everything:
+
+- **Motors:** wheels always reach their commanded speed, so the sim won't show a stall.
+- **Tyres:** the grip values in `wheel.urdf.xacro` are chosen so the robot can turn, not measured.
+- **GPS:** noise is random on each fix, while a real receiver wanders slowly.
+- **Obstacles:** the world is empty, and Nav2 has no obstacle sensing yet.
