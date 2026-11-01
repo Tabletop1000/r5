@@ -1,17 +1,18 @@
-# Publishes Gazebo's clock and sensors on the topics the real robot uses.
+# Sensors go to /sim first, because Gazebo sends zero covariance. sensor_covariance.py fixes that
+# and republishes them on the real robot's topics.
 - ros_topic_name: /clock
   gz_topic_name: /clock
   ros_type_name: rosgraph_msgs/msg/Clock
   gz_type_name: gz.msgs.Clock
   direction: GZ_TO_ROS
 
-- ros_topic_name: /bno055/imu
+- ros_topic_name: /sim/imu
   gz_topic_name: /imu/data
   ros_type_name: sensor_msgs/msg/Imu
   gz_type_name: gz.msgs.IMU
   direction: GZ_TO_ROS
 
-- ros_topic_name: /fix
+- ros_topic_name: /sim/fix
   gz_topic_name: /gps/data
   ros_type_name: sensor_msgs/msg/NavSatFix
   gz_type_name: gz.msgs.NavSat

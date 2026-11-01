@@ -1,0 +1,4 @@
+# Gazebo's IMU heading is already true, so the real robot's calibration doesn't apply.
+navsat_transform:
+  ros__parameters:
+    yaw_offset: 0.0

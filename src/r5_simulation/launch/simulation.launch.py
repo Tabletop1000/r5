@@ -1,5 +1,10 @@
 from launch import LaunchDescription
-from launch.actions import DeclareLaunchArgument, IncludeLaunchDescription, RegisterEventHandler
+from launch.actions import (
+    DeclareLaunchArgument,
+    GroupAction,
+    IncludeLaunchDescription,
+    RegisterEventHandler,
+)
 from launch.event_handlers import OnProcessExit
 from launch.launch_description_sources import PythonLaunchDescriptionSource
 from launch.substitutions import (
@@ -10,7 +15,7 @@ from launch.substitutions import (
     PythonExpression,
 )
 
-from launch_ros.actions import Node
+from launch_ros.actions import Node, SetParameter
 from launch_ros.parameter_descriptions import ParameterValue
 from launch_ros.substitutions import FindPackageShare
 
@@ -33,6 +38,9 @@ def generate_launch_description():
     )
     robot_controllers = PathJoinSubstitution(
         [FindPackageShare("r5"), "config", "diffbot_controllers.yaml"]
+    )
+    navsat_params = PathJoinSubstitution(
+        [FindPackageShare("r5_simulation"), "config", "navsat_sim.yaml"]
     )
     robot_description_content = Command(
         [
@@ -62,6 +70,12 @@ def generate_launch_description():
         executable="parameter_bridge",
         output="both",
         parameters=[{"config_file": bridge_config, "use_sim_time": True}],
+    )
+    sensor_covariance_node = Node(
+        package="r5_simulation",
+        executable="sensor_covariance.py",
+        output="both",
+        parameters=[{"use_sim_time": True}],
     )
     robot_state_pub_node = Node(
         package="robot_state_publisher",
@@ -105,13 +119,37 @@ def generate_launch_description():
         )
     )
 
+    # The robot's own launch files, unchanged except for simulated time.
+    robot_stack = GroupAction(
+        [
+            SetParameter(name="use_sim_time", value=True),
+            IncludeLaunchDescription(
+                PythonLaunchDescriptionSource(
+                    PathJoinSubstitution(
+                        [FindPackageShare("r5_localisation"), "launch", "localisation.launch.py"]
+                    )
+                ),
+                launch_arguments={"navsat_params": navsat_params}.items(),
+            ),
+            IncludeLaunchDescription(
+                PythonLaunchDescriptionSource(
+                    PathJoinSubstitution(
+                        [FindPackageShare("r5_navigation"), "launch", "navigation.launch.py"]
+                    )
+                )
+            ),
+        ]
+    )
+
     return LaunchDescription(
         declared_arguments
         + [
             gazebo,
             bridge_node,
+            sensor_covariance_node,
             robot_state_pub_node,
             spawn_robot_node,
             delay_controllers_after_spawn_robot,
+            robot_stack,
         ]
     )
