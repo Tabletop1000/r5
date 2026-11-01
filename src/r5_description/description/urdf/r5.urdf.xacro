@@ -88,6 +88,7 @@
     topic_name="gps/data"/>
 
   <xacro:r5_ros2_control 
-    name="$(arg robot_name)" prefix="$(arg prefix)"  use_mock_hardware="$(arg use_mock_hardware)"/>
+    name="$(arg robot_name)" prefix="$(arg prefix)"  use_mock_hardware="$(arg use_mock_hardware)"
+    use_gazebo="$(arg use_gazebo)"/>
 
 </robot>
