@@ -73,7 +73,7 @@ controller. Running `diffbot.launch.py` by itself therefore publishes no `odom` 
 
 The `map` origin is set by the first GPS fix after startup. The first fix can be slow, because the
 GPS node may cold-reset the receiver when it starts, so wait for
-`ros2 topic echo /ublox_gps_node/fix --field status` to show `status: 0` or higher before moving.
+`ros2 topic echo /fix --field status` to show `status: 0` or higher before moving.
 
 | Topic | Contents |
 | --- | --- |
@@ -139,7 +139,7 @@ steel near the IMU are bending the magnetic field. Move the IMU if you can.
 
 Keep the same structure, then:
 
-1. Point `/ublox_gps_node/fix` in `launch/localisation.launch.py` at the new receiver if the topic
+1. Point `/fix` in `launch/localisation.launch.py` at the new receiver if the topic
    changes.
 2. Check the receiver reports realistic covariance, because the global EKF uses it to weight GPS.
 3. Set the true antenna offset on `gps_link`.

@@ -32,7 +32,7 @@ def generate_launch_description():
         parameters=[params],
         remappings=[
             ("imu", "/bno055/imu"),
-            ("gps/fix", "/ublox_gps_node/fix"),
+            ("gps/fix", "/fix"),
             ("odometry/filtered", "odometry/global"),
         ],
     )
