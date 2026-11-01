@@ -11,6 +11,7 @@ doesn't need installing on the host.
 | `src/r5_description` | URDF, ros2_control hardware plugin, controller config and base launch files. The package is named `r5`. |
 | `src/r5_sensors` | Config and launch files for the BNO055 IMU and u-blox GPS |
 | `src/r5_localisation` | Dual EKF localisation. See its [README](../src/r5_localisation/README.md). |
+| `src/r5_navigation` | Nav2 configuration and launch files |
 | `src/r5_bringup` | `r5.launch.py`, which starts everything on the robot |
 | `docker/` | The laptop development image |
 
