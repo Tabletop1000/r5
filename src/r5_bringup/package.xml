@@ -11,6 +11,7 @@
 
   <exec_depend>r5</exec_depend>
   <exec_depend>r5_localisation</exec_depend>
+  <exec_depend>r5_navigation</exec_depend>
   <exec_depend>r5_sensors</exec_depend>
 
   <test_depend>ament_lint_auto</test_depend>

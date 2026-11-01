@@ -21,5 +21,6 @@ def generate_launch_description():
             include_launch("r5_sensors", "bno055_imu_node-launch.py"),
             include_launch("r5_sensors", "ublox_gps_node-launch.py"),
             include_launch("r5_localisation", "localisation.launch.py"),
+            include_launch("r5_navigation", "navigation.launch.py"),
         ]
     )

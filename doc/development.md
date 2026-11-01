@@ -176,7 +176,8 @@ source install/setup.bash
 ros2 launch r5_bringup r5.launch.py
 ```
 
-`rosdep` is only needed when dependencies change. The launch stops with a fatal error if a motor node
+`rosdep` is only needed when dependencies change. Run `sudo apt update && sudo apt upgrade` before
+it, because ROS packages from different dates can crash with symbol errors. The launch stops with a fatal error if a motor node
 is missing, so check the devices if that happens:
 
 ```bash

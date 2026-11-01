@@ -20,6 +20,15 @@ RUN apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-ins
     ros-jazzy-joint-state-broadcaster \
     ros-jazzy-joint-state-publisher-gui \
     ros-jazzy-launch-testing-ament-cmake \
+    ros-jazzy-nav2-bt-navigator \
+    ros-jazzy-nav2-controller \
+    ros-jazzy-nav2-lifecycle-manager \
+    ros-jazzy-nav2-navfn-planner \
+    ros-jazzy-nav2-planner \
+    ros-jazzy-nav2-regulated-pure-pursuit-controller \
+    ros-jazzy-nav2-simple-commander \
+    ros-jazzy-nav2-velocity-smoother \
+    ros-jazzy-nav2-waypoint-follower \
     ros-jazzy-ros2-control-cmake \
     ros-jazzy-ros2controlcli \
     ros-jazzy-robot-localization \

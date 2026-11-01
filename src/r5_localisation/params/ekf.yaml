@@ -100,7 +100,7 @@ navsat_transform:
     # yaw_offset takes up every heading error, including magnetic declination.
     # Calibrate it as described in ../README.md.
     magnetic_declination_radians: 0.0
-    yaw_offset: 0.0
+    yaw_offset: -1.4
     zero_altitude: true
     broadcast_utm_transform: false
     publish_filtered_gps: true
