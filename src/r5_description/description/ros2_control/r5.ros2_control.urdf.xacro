@@ -56,6 +56,14 @@
           </joint>
 
       </ros2_control>
+
+      <xacro:if value="${use_gazebo}">
+          <gazebo>
+              <plugin filename="gz_ros2_control-system" name="gz_ros2_control::GazeboSimROS2ControlPlugin">
+                  <parameters>$(find r5)/config/diffbot_controllers.yaml</parameters>
+              </plugin>
+          </gazebo>
+      </xacro:if>
   </xacro:macro>
 
 </robot>

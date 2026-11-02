@@ -64,16 +64,18 @@
                 <diffuse>${gazebo_material_diffuse}</diffuse>
                 <specular>${gazebo_material_specular}</specular>
             </material>
-            <sensor name="${prefix}gps_sensor" type="gps">
+            <sensor name="${prefix}gps_sensor" type="navsat">
                 <topic>${topic_name}</topic>
                 <update_rate>${update_rate}</update_rate>
                 <always_on>${always_on}</always_on>
-                <gps>
+                <navsat>
                     <position_sensing>
+                        <!-- Gazebo adds horizontal noise to latitude and longitude, so this is in
+                             degrees. 1.5e-5 is about 1.5 m. -->
                         <horizontal>
                             <noise type="gaussian">
                                 <mean>0.0</mean>
-                                <stddev>2</stddev>
+                                <stddev>1.5e-5</stddev>
                             </noise>
                         </horizontal>
                         <vertical>
@@ -97,7 +99,7 @@
                             </noise>
                         </vertical>
                     </velocity_sensing>
-                </gps>
+                </navsat>
                 <visualize>${visualize}</visualize>
                 <gz_frame_id>${prefix}${frame_id}_link</gz_frame_id>
             </sensor>
