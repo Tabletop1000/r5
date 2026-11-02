@@ -53,7 +53,7 @@ Roll, pitch and height are ignored (`two_d_mode: true`), which suits flat, open 
 `robot_localization` is a new dependency, so install it on the robot first:
 
 ```bash
-rosdep install --from-paths src --ignore-src -r -y
+rosdep install --from-paths src --ignore-src -r -y --skip-keys "ros_gz_sim ros_gz_bridge gz_ros2_control"
 ```
 
 Localisation starts with everything else:

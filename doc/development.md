@@ -12,6 +12,7 @@ doesn't need installing on the host.
 | `src/r5_sensors` | Config and launch files for the BNO055 IMU and u-blox GPS |
 | `src/r5_localisation` | Dual EKF localisation. See its [README](../src/r5_localisation/README.md). |
 | `src/r5_navigation` | Nav2 configuration and launch files |
+| `src/r5_simulation` | Gazebo world and launch file, for the laptop only |
 | `src/r5_bringup` | `r5.launch.py`, which starts everything on the robot |
 | `docker/` | The laptop development image |
 
@@ -170,13 +171,14 @@ then on the robot:
 ```bash
 cd ~/git/r5
 git pull
-rosdep install --from-paths src --ignore-src -r -y
+rosdep install --from-paths src --ignore-src -r -y --skip-keys "ros_gz_sim ros_gz_bridge gz_ros2_control"
 colcon build
 source install/setup.bash
 ros2 launch r5_bringup r5.launch.py
 ```
 
-`rosdep` is only needed when dependencies change. Run `sudo apt update && sudo apt upgrade` before
+`rosdep` is only needed when dependencies change. `--skip-keys` keeps Gazebo off the robot, because
+`r5_simulation` is only for the laptop. Run `sudo apt update && sudo apt upgrade` before
 it, because ROS packages from different dates can crash with symbol errors. The launch stops with a fatal error if a motor node
 is missing, so check the devices if that happens:
 
