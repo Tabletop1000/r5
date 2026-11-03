@@ -1,0 +1,22 @@
+<?xml version="1.0"?>
+<?xml-model href="http://download.ros.org/schema/package_format3.xsd" schematypens="http://www.w3.org/2001/XMLSchema"?>
+<package format="3">
+  <name>r5_dashboard_server</name>
+  <version>0.1.0</version>
+  <description>Serves the R5 dashboard web app, handles login, and passes the browser's WebSocket through to rosbridge.</description>
+  <maintainer email="jadondutra@gmail.com">jdutra</maintainer>
+  <license>TODO</license>
+
+  <exec_depend>ament_index_python</exec_depend>
+  <exec_depend>python3-aiohttp</exec_depend>
+  <exec_depend>python3-cryptography</exec_depend>
+  <exec_depend>rosbridge_server</exec_depend>
+  <exec_depend>launch</exec_depend>
+  <exec_depend>launch_ros</exec_depend>
+
+  <test_depend>python3-pytest</test_depend>
+
+  <export>
+    <build_type>ament_python</build_type>
+  </export>
+</package>
