@@ -65,3 +65,26 @@ export async function changePassword(current: string, next: string): Promise<Log
     return { ok: false, message: `Failed (${resp.status}).` };
   }
 }
+
+export interface MapLayerConfig {
+  id: string;
+  name: string;
+  tiles: string[];
+  tileSize: number;
+  maxzoom: number;
+  attribution: string;
+}
+
+export interface MapConfig {
+  layers: MapLayerConfig[];
+}
+
+let mapConfig: Promise<MapConfig> | null = null;
+
+/** Tile sources set on the robot (spec NF-11, NF-12). Fetched once per page load. */
+export function getMapConfig(): Promise<MapConfig> {
+  mapConfig ??= fetch('/api/map-config', { credentials: 'same-origin' })
+    .then((r) => (r.ok ? (r.json() as Promise<MapConfig>) : { layers: [] }))
+    .catch(() => ({ layers: [] }));
+  return mapConfig;
+}

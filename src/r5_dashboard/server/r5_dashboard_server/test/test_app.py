@@ -218,3 +218,15 @@ class ChangePasswordTest(DashboardAppTest):
         assert await authed(new_token)
         assert not await authed(mine)
         assert not await authed(other)
+
+
+class MapConfigTest(DashboardAppTest):
+    async def test_map_config_needs_login_and_tile_hosts_are_allowed(self):
+        resp = await self.client.get("/api/map-config")
+        assert resp.status == 401
+        _, token = await self.login()
+        resp = await self.client.get("/api/map-config", headers=self.auth_headers(token))
+        assert (await resp.json())["layers"][0]["id"] == "osm"
+        csp = resp.headers["Content-Security-Policy"]
+        assert "img-src 'self' data: blob: https://tile.openstreetmap.org" in csp
+        assert "worker-src 'self' blob:" in csp

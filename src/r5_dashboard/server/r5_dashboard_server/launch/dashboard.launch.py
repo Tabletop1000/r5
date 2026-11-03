@@ -1,7 +1,8 @@
 """Start rosbridge (localhost only), the dashboard server in front of it (spec D7), and the
-robot-side nodes the dashboard uses: robot_status (usage, service schedule, alerts) and motor_test.
+robot-side nodes the dashboard uses: robot_status (usage, service schedule, alerts), motor_test,
+and field_manager (fields, home point, boundary recording).
 
-On the simulator, pass use_sim_time:=true.
+On the simulator, pass use_sim_time:=true record_fix_requirement:=any.
 """
 
 from launch import LaunchDescription
@@ -26,6 +27,11 @@ def generate_launch_description():
         DeclareLaunchArgument("rosbridge_port", default_value="9090"),
         DeclareLaunchArgument("data_dir", default_value="~/.r5"),
         DeclareLaunchArgument("use_sim_time", default_value="false"),
+        DeclareLaunchArgument(
+            "record_fix_requirement",
+            default_value="rtk_fixed",
+            description="Worst GPS fix accepted when recording a boundary: rtk_fixed, rtk_float or any.",
+        ),
     ]
     use_sim_time = LaunchConfiguration("use_sim_time")
 
@@ -67,4 +73,13 @@ def generate_launch_description():
         parameters=[{"use_sim_time": use_sim_time}],
     )
 
-    return LaunchDescription(arguments + [rosbridge, server, robot_status, motor_test])
+    field_manager = Node(
+        package="r5_dashboard_server",
+        executable="field_manager",
+        output="both",
+        parameters=[
+            {"data_dir": data_dir, "record_fix_requirement": LaunchConfiguration("record_fix_requirement")}
+        ],
+    )
+
+    return LaunchDescription(arguments + [rosbridge, server, robot_status, motor_test, field_manager])

@@ -4,6 +4,7 @@ import { SideMenu } from './components/SideMenu';
 import { StatusStrip } from './components/StatusStrip';
 import { PlaceholderPage } from './pages/PlaceholderPage';
 import { RobotPage } from './pages/robot/RobotPage';
+import { FieldsPage } from './pages/fields/FieldsPage';
 import { SprayPage } from './pages/SprayPage';
 import { RobotConnection, defaultRosUrl } from './ros/connection';
 import { RobotContext } from './ros/RobotContext';
@@ -49,7 +50,7 @@ export function Dashboard({ onLogout, onSessionEnded }: Props) {
 function renderPage(page: PageId) {
   switch (page) {
     case 'fields':
-      return <PlaceholderPage title="Manage Fields" message="Field management is coming in a later update." />;
+      return <FieldsPage />;
     case 'spray':
       return <SprayPage />;
     case 'mow':

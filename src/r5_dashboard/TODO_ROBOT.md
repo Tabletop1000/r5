@@ -7,7 +7,7 @@ delivery plan in [spec.md](spec.md) section 9.
 Each item says what the dashboard expects, so the two sides meet without guesswork. Until an item
 is done, the dashboard shows "Not available" for it rather than failing.
 
-Last updated: 2026-11-04 (after delivery step 2, Robot page).
+Last updated: 2026-11-04 (after delivery step 3, Manage Fields).
 
 ## Status data
 
@@ -66,6 +66,24 @@ Last updated: 2026-11-04 (after delivery step 2, Robot page).
 - [ ] **Joint velocities.** The motor test and wheel speed readout need `/joint_states.velocity` from
   the real hardware plugin, in rad/s.
 
+## Driving and recording fields (step 3)
+
+- [ ] **Xbox controller.** Run `joy` and `teleop_twist_joy` on the robot, with the controller connected
+  to the robot (USB dongle or Bluetooth), not to the laptop (spec RI-4 to RI-7).
+  - Use a held enable (deadman) button, a speed cap, and TwistStamped output into `twist_mux`.
+  - `joy` must publish `sensor_msgs/Joy` on `/joy`. The dashboard's `field_manager` reads it: holding
+    button index 3 (Y on an Xbox controller under the Linux driver) for 1 s starts or stops a boundary
+    recording. Change `joy_record_button` if Y is used for something else, or set it to −1 to turn
+    this off. Make sure the record button isn't also the deadman or a drive button.
+- [ ] **RTK for recording.** `field_manager` only keeps positions with an RTK fixed solution by
+  default (`record_fix_requirement`). It tells RTK fixed from float using `/navpvt`
+  (`ublox_msgs/NavPVT`), so the u-blox driver must publish it and `ublox_msgs` must be installed
+  where `field_manager` runs. Without `/navpvt` it can only see "corrections in use" from `/fix`.
+- [ ] **Simulator GPS noise (optional, for testing).** The simulated GPS has 1.5 m noise, so a
+  boundary recorded in Gazebo zigzags and crosses itself. To try recording realistically in
+  simulation, lower the noise in `gps.urdf.xacro` (and the matching covariance in
+  `sensor_covariance.py`) to RTK-like values, e.g. 0.02 m.
+
 ## Installation on the robot
 
 - [ ] Link this repository into the robot workspace, run `rosdep install`, and build
@@ -86,9 +104,6 @@ Last updated: 2026-11-04 (after delivery step 2, Robot page).
 These are listed now so the hardware and robot configuration can be planned. Details will be
 filled in as each step is designed.
 
-- [ ] **Step 3, field recording by driving:** `joy` and `teleop_twist_joy` for the Xbox controller,
-  connected to the robot (USB dongle or Bluetooth). Needs a held enable (deadman) button, a speed
-  cap, and output into `twist_mux` (spec RI-4 to RI-7). A controller button to start/stop recording.
 - [ ] **Step 4, Area Spray:**
   - Fields2Cover integration.
   - Sprayer placeholder interfaces from spec 5.5: `/r5/sprayer/enable` (`std_msgs/Bool`) and

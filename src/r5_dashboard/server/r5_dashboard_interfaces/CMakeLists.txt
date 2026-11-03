@@ -8,8 +8,17 @@ find_package(rosidl_default_generators REQUIRED)
 rosidl_generate_interfaces(${PROJECT_NAME}
   "msg/Alert.msg"
   "msg/AlertArray.msg"
+  "msg/Field.msg"
+  "msg/GeoPolygon.msg"
+  "msg/LatLon.msg"
+  "msg/RecordingStatus.msg"
   "msg/RobotStats.msg"
   "srv/AcknowledgeAlert.srv"
+  "srv/DeleteField.srv"
+  "srv/GetHome.srv"
+  "srv/ListFields.srv"
+  "srv/SaveField.srv"
+  "srv/SetHome.srv"
   "action/MotorTest.action"
   DEPENDENCIES builtin_interfaces
 )

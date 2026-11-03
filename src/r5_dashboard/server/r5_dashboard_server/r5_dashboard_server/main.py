@@ -12,6 +12,7 @@ from aiohttp import web
 
 from .app import make_app, make_redirect_app
 from .auth import LoginThrottle, PasswordStore, SessionStore
+from .mapconfig import load_map_config
 from .tls import ensure_certificate, make_ssl_context
 
 DEFAULT_DATA_DIR = Path.home() / ".r5"
@@ -77,6 +78,7 @@ async def serve(args: argparse.Namespace) -> None:
         rosbridge_url=args.rosbridge_url,
         web_root=web_root,
         throttle=LoginThrottle(),
+        map_config=load_map_config(data_dir),
     )
     runner = web.AppRunner(app, access_log=None)
     await runner.setup()

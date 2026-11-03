@@ -26,11 +26,23 @@ export const TOPICS = {
   imuCalibration: { name: '/bno055/calib_status', type: 'std_msgs/msg/String' },
   imuTemperature: { name: '/bno055/temp', type: 'sensor_msgs/msg/Temperature', throttleMs: 1000 },
   jointStates: { name: '/joint_states', type: 'sensor_msgs/msg/JointState', throttleMs: 200 },
+  /** Boundary recording state and track, from field_manager. */
+  recordingStatus: { name: '/r5/recording/status', type: 'r5_dashboard_interfaces/msg/RecordingStatus', throttleMs: 500 },
+  /** Goes up whenever fields or the home point change, so every open dashboard reloads them. */
+  fieldsRevision: { name: '/r5/fields/revision', type: 'std_msgs/msg/UInt32' },
 } as const satisfies Record<string, TopicSpec>;
 
 export const SERVICES = {
   serviceDone: { name: '/r5/stats/service_done', type: 'std_srvs/srv/Trigger' },
   acknowledgeAlert: { name: '/r5/alerts/acknowledge', type: 'r5_dashboard_interfaces/srv/AcknowledgeAlert' },
+  listFields: { name: '/r5/fields/list', type: 'r5_dashboard_interfaces/srv/ListFields' },
+  saveField: { name: '/r5/fields/save', type: 'r5_dashboard_interfaces/srv/SaveField' },
+  deleteField: { name: '/r5/fields/delete', type: 'r5_dashboard_interfaces/srv/DeleteField' },
+  getHome: { name: '/r5/home/get', type: 'r5_dashboard_interfaces/srv/GetHome' },
+  setHome: { name: '/r5/home/set', type: 'r5_dashboard_interfaces/srv/SetHome' },
+  startRecording: { name: '/r5/recording/start', type: 'std_srvs/srv/Trigger' },
+  stopRecording: { name: '/r5/recording/stop', type: 'std_srvs/srv/Trigger' },
+  clearRecording: { name: '/r5/recording/clear', type: 'std_srvs/srv/Trigger' },
   /** From rosapi, which starts with rosbridge. Used to measure round-trip time. */
   getTime: { name: '/rosapi/get_time', type: 'rosapi_msgs/srv/GetTime' },
 } as const;
@@ -180,4 +192,56 @@ export interface MotorTestResult {
   measured_valid: boolean;
   measured_left: number;
   measured_right: number;
+}
+
+// ---- Fields (r5_dashboard_interfaces) ----
+
+export interface LatLon {
+  latitude: number;
+  longitude: number;
+}
+
+export interface GeoPolygon {
+  points: LatLon[];
+}
+
+export interface FieldMsg {
+  id: string;
+  name: string;
+  boundary: LatLon[];
+  keep_out: GeoPolygon[];
+  headland_width_m: number;
+  source: string;
+  notes: string;
+  area_m2: number;
+  created: RosTime;
+  modified: RosTime;
+}
+
+export const RECORDING_STATE = { IDLE: 0, RECORDING: 1, FINISHED: 2 } as const;
+
+export interface RecordingStatus {
+  state: number;
+  points: LatLon[];
+  skipped_points: number;
+  length_m: number;
+  required_fix: string;
+  current_fix: string;
+  message: string;
+  started: RosTime;
+}
+
+export interface SaveFieldResponse {
+  success: boolean;
+  message: string;
+  field: FieldMsg;
+}
+
+export interface GetHomeResponse {
+  is_set: boolean;
+  position: LatLon;
+}
+
+export interface UInt32 {
+  data: number;
 }

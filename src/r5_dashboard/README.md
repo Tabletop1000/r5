@@ -16,7 +16,7 @@ browser ──HTTPS / WSS──► r5_dashboard_server (:8443) ──ws://127.0.
 | Path | Contents |
 | --- | --- |
 | `web/` | The browser app: TypeScript, React, Vite, roslib |
-| `server/r5_dashboard_server/` | ROS 2 (ament_python) package: HTTPS server, login, WebSocket proxy, the `robot_status` and `motor_test` nodes, launch file |
+| `server/r5_dashboard_server/` | ROS 2 (ament_python) package: HTTPS server, login, WebSocket proxy, the `robot_status`, `motor_test` and `field_manager` nodes, launch file |
 | `server/r5_dashboard_interfaces/` | ROS 2 messages, services and actions between the dashboard and the robot |
 | `docker/` | Laptop image with ROS 2 Jazzy, rosbridge and the server's Python dependencies |
 
@@ -74,6 +74,7 @@ dependencies.
 | `rosbridge_port` | `9090` | Bound to 127.0.0.1 only |
 | `data_dir` | `~/.r5` | Password hash, sessions, TLS certificate, usage counters |
 | `use_sim_time` | `false` | Set `true` with the Gazebo simulation |
+| `record_fix_requirement` | `rtk_fixed` | Worst GPS fix accepted when recording a boundary: `rtk_fixed`, `rtk_float` or `any`. Use `any` with the simulator or the development M9N receiver. |
 
 ### What the launch file starts
 
@@ -83,6 +84,7 @@ dependencies.
 | `server` | HTTPS, login, web app, WebSocket proxy |
 | `robot_status` | Operating hours, distance, service schedule (`/r5/stats`); active alerts from `/diagnostics_agg` and its own checks (`/r5/alerts`); services to record a service and acknowledge an alert |
 | `motor_test` | `/r5/motor_test` action: drives one side or both slowly for 2 s and checks the wheel speeds. Speed and time are fixed on the robot. |
+| `field_manager` | Stores fields and the home point; records a boundary from `/fix` while the robot is driven. Recording can also be started and stopped by holding controller button 3 (Y on an Xbox controller) for a second (`joy_record_button`, `joy_hold_s` parameters). |
 
 ### Files in the data directory
 
@@ -93,6 +95,20 @@ dependencies.
 | `tls/cert.pem`, `tls/key.pem` | Self-signed certificate, made on first start. Delete both to make a new one. |
 | `stats.json` | Operating time, distance, last service. Saved every minute and on shutdown. |
 | `service_log.json` | Every service recorded with "Service done" |
+| `fields/<id>.geojson` | One file per field: boundary, keep-out zones and settings. Opens directly in QGIS. |
+| `home.geojson` | The home point |
+| `map.json` | Optional: map tile sources (see below) |
+
+### Map tiles
+
+The map uses the OpenStreetMap street map by default, which needs internet on the device viewing
+the dashboard. Without internet the map shows a plain 10/50/100 m grid, and fields, the robot and
+the home point still appear on it.
+
+To use other tiles, such as open aerial imagery for your area, create `map.json` in the data
+directory. The format is documented in `server/r5_dashboard_server/r5_dashboard_server/mapconfig.py`.
+Only use imagery whose licence allows it (spec NF-12). With more than one layer, a selector appears on
+the map. Restart the server after changing it.
 
 All are readable only by the robot's user. To reset a forgotten password, run `set_password` again,
 or change it from the Robot page.
@@ -123,7 +139,7 @@ docker run -it --rm --net=host --ipc=host \
 colcon --log-base /tmp/log build --base-paths server --build-base /tmp/build --install-base /tmp/install
 source /tmp/install/setup.bash
 ros2 run r5_dashboard_server set_password --data-dir /data   # first time only
-ros2 launch r5_dashboard_server dashboard.launch.py data_dir:=/data use_sim_time:=true
+ros2 launch r5_dashboard_server dashboard.launch.py data_dir:=/data use_sim_time:=true record_fix_requirement:=any
 ```
 
 | Option | Purpose |
@@ -176,4 +192,6 @@ robot yet show "Not available"; [TODO_ROBOT.md](TODO_ROBOT.md) lists them.
 | IMU | `/bno055/imu`, `/bno055/calib_status`, `/bno055/temp` | BNO055 driver (the simulator has only `imu`) |
 | Wheels | `/joint_states` | joint_state_broadcaster |
 | Motor test | `/r5/motor_test` | `motor_test` |
+| Fields, home | `/r5/fields/*`, `/r5/home/*` services, `/r5/fields/revision` | `field_manager` |
+| Boundary recording | `/r5/recording/start`, `stop`, `clear`, `/r5/recording/status` | `field_manager` (reads `/fix`, `/navpvt`, `/joy`) |
 | Current action | — | Job manager, not built yet |

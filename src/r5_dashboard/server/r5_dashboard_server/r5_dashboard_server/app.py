@@ -15,6 +15,8 @@ import aiohttp
 from aiohttp import WSMsgType, web
 
 from .auth import LoginThrottle, PasswordStore, SessionStore
+from .mapconfig import DEFAULT_CONFIG as DEFAULT_MAP_CONFIG
+from .mapconfig import tile_origins
 
 log = logging.getLogger("r5_dashboard_server")
 
@@ -25,17 +27,21 @@ SESSIONS = web.AppKey("sessions", SessionStore)
 THROTTLE = web.AppKey("throttle", LoginThrottle)
 ROSBRIDGE_URL = web.AppKey("rosbridge_url", str)
 WEB_ROOT = web.AppKey("web_root", object)  # Path | None
+MAP_CONFIG = web.AppKey("map_config", dict)
 HTTP_CLIENT = web.AppKey("http_client", aiohttp.ClientSession)
 
-_SECURITY_HEADERS = {
-    "X-Content-Type-Options": "nosniff",
-    "X-Frame-Options": "DENY",
-    "Referrer-Policy": "no-referrer",
-    "Content-Security-Policy": (
-        "default-src 'self'; connect-src 'self'; img-src 'self' data: blob:; "
-        "style-src 'self' 'unsafe-inline'; frame-ancestors 'none'"
-    ),
-}
+def _security_headers_for(tile_origins: list[str]) -> dict[str, str]:
+    tiles = "".join(f" {o}" for o in tile_origins)
+    return {
+        "X-Content-Type-Options": "nosniff",
+        "X-Frame-Options": "DENY",
+        # Map tile servers such as OpenStreetMap's require a Referer; only the origin is sent.
+        "Referrer-Policy": "strict-origin-when-cross-origin",
+        "Content-Security-Policy": (
+            f"default-src 'self'; connect-src 'self'{tiles}; img-src 'self' data: blob:{tiles}; "
+            "style-src 'self' 'unsafe-inline'; worker-src 'self' blob:; frame-ancestors 'none'"
+        ),
+    }
 
 
 def _json_error(status: int, message: str, **extra) -> web.Response:
@@ -62,12 +68,21 @@ def _same_origin(request: web.Request) -> bool:
     return urlsplit(origin).netloc.lower() == request.host.lower()
 
 
-@web.middleware
-async def _security_headers(request: web.Request, handler):
-    response = await handler(request)
-    for name, value in _SECURITY_HEADERS.items():
-        response.headers.setdefault(name, value)
-    return response
+def _security_headers_middleware(headers: dict[str, str]):
+    @web.middleware
+    async def middleware(request: web.Request, handler):
+        response = await handler(request)
+        for name, value in headers.items():
+            response.headers.setdefault(name, value)
+        return response
+
+    return middleware
+
+
+async def _get_map_config(request: web.Request) -> web.Response:
+    if not _is_authenticated(request):
+        return _json_error(401, "Not logged in.")
+    return web.json_response(request.app[MAP_CONFIG])
 
 
 async def _get_session(request: web.Request) -> web.Response:
@@ -271,8 +286,14 @@ def make_app(
     rosbridge_url: str,
     web_root: Path | None,
     throttle: LoginThrottle | None = None,
+    map_config: dict | None = None,
 ) -> web.Application:
-    app = web.Application(middlewares=[_security_headers], client_max_size=64 * 1024)
+    map_config = map_config or DEFAULT_MAP_CONFIG
+    app = web.Application(
+        middlewares=[_security_headers_middleware(_security_headers_for(tile_origins(map_config)))],
+        client_max_size=64 * 1024,
+    )
+    app[MAP_CONFIG] = map_config
     app[PASSWORDS] = passwords
     app[SESSIONS] = sessions
     app[THROTTLE] = throttle or LoginThrottle()
@@ -283,6 +304,7 @@ def make_app(
     app.router.add_post("/api/login", _login)
     app.router.add_post("/api/logout", _logout)
     app.router.add_post("/api/password", _change_password)
+    app.router.add_get("/api/map-config", _get_map_config)
     app.router.add_get("/ws", _ros_websocket)
     app.router.add_get("/{path:.*}", _static)
     return app

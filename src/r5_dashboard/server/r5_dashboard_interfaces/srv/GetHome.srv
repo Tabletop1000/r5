@@ -1,0 +1,4 @@
+---
+# false until a home point has been set (spec FM-10).
+bool is_set
+LatLon position
