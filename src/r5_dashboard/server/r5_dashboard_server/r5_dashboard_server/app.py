@@ -120,15 +120,64 @@ async def _login(request: web.Request) -> web.Response:
     token = sessions.create()
     log.info("Dashboard login from %s", client)
     response = web.json_response({"authenticated": True})
+    _set_session_cookie(response, token, sessions.lifetime_s)
+    return response
+
+
+def _set_session_cookie(response: web.Response, token: str, lifetime_s: float) -> None:
     response.set_cookie(
         SESSION_COOKIE,
         token,
-        max_age=int(sessions.lifetime_s),
+        max_age=int(lifetime_s),
         path="/",
         secure=True,
         httponly=True,
         samesite="Strict",
     )
+
+
+async def _change_password(request: web.Request) -> web.Response:
+    """Change the password from the Robot page (spec NF-10).
+
+    Needs the current password. Every other device is logged out; this one gets a new session.
+    """
+    if not _is_authenticated(request):
+        return _json_error(401, "Not logged in.")
+    if not _same_origin(request):
+        return _json_error(403, "Request from another site refused.")
+    try:
+        body = await request.json()
+        current, new = body["current"], body["new"]
+        if not isinstance(current, str) or not isinstance(new, str):
+            raise TypeError
+    except (ValueError, KeyError, TypeError):
+        return _json_error(400, "Expected a JSON body with current and new passwords.")
+
+    client = request.remote or "unknown"
+    throttle = request.app[THROTTLE]
+    wait = throttle.seconds_locked(client)
+    if wait > 0:
+        return _json_error(
+            429, f"Too many wrong passwords. Try again in {int(wait) + 1} seconds.", retryAfter=int(wait) + 1
+        )
+
+    passwords = request.app[PASSWORDS]
+    loop = asyncio.get_running_loop()
+    if not await loop.run_in_executor(None, passwords.verify, current):
+        throttle.record_failure(client)
+        return _json_error(403, "The current password is wrong.")
+    throttle.record_success(client)
+    try:
+        await loop.run_in_executor(None, passwords.set, new)
+    except ValueError as exc:
+        return _json_error(400, str(exc))
+
+    sessions = request.app[SESSIONS]
+    sessions.revoke_all()
+    token = sessions.create()
+    log.info("Dashboard password changed from %s; other devices logged out", client)
+    response = web.json_response({"changed": True})
+    _set_session_cookie(response, token, sessions.lifetime_s)
     return response
 
 
@@ -233,6 +282,7 @@ def make_app(
     app.router.add_get("/api/session", _get_session)
     app.router.add_post("/api/login", _login)
     app.router.add_post("/api/logout", _logout)
+    app.router.add_post("/api/password", _change_password)
     app.router.add_get("/ws", _ros_websocket)
     app.router.add_get("/{path:.*}", _static)
     return app

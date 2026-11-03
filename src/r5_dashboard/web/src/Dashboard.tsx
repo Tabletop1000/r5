@@ -3,6 +3,7 @@ import { getSession } from './api';
 import { SideMenu } from './components/SideMenu';
 import { StatusStrip } from './components/StatusStrip';
 import { PlaceholderPage } from './pages/PlaceholderPage';
+import { RobotPage } from './pages/robot/RobotPage';
 import { SprayPage } from './pages/SprayPage';
 import { RobotConnection, defaultRosUrl } from './ros/connection';
 import { RobotContext } from './ros/RobotContext';
@@ -54,7 +55,7 @@ function renderPage(page: PageId) {
     case 'mow':
       return <PlaceholderPage title="Mow" message="Coming soon. Mowing is not available yet." />;
     case 'robot':
-      return <PlaceholderPage title="Robot" message="Robot status and tests are coming in the next update." />;
+      return <RobotPage />;
   }
 }
 

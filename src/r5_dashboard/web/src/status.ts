@@ -1,6 +1,6 @@
 // Pure helpers behind the status strip (spec NAV-3, NF-3). Kept free of React so they can be tested.
 
-import type { BatteryState, DiagnosticArray, DiagnosticStatus } from './ros/topics';
+import { ALERT_SEVERITY, type AlertArray, type BatteryState } from './ros/topics';
 
 /** Data older than this is shown as stale (spec NF-3). */
 export const STALE_AFTER_MS = 5000;
@@ -17,29 +17,17 @@ export function batteryPercent(msg: BatteryState | null): number | null {
   return Math.round(Math.min(1, Math.max(0, p)) * 100);
 }
 
-export const DIAGNOSTIC_LEVEL = { OK: 0, WARN: 1, ERROR: 2, STALE: 3 } as const;
-
 export interface AlertCounts {
   warnings: number;
   errors: number;
 }
 
-/**
- * Counts problems in an aggregated diagnostics message.
- *
- * The aggregator publishes each group ("/Sensors") as well as its members ("/Sensors/IMU"), and a
- * group copies the worst level of its members. Only entries with no members are counted, so one
- * fault is counted once.
- */
-export function countAlerts(msg: DiagnosticArray | null): AlertCounts {
+/** Counts active warnings and errors from robot_status's alert list. Info alerts aren't counted. */
+export function countAlerts(msg: AlertArray | null): AlertCounts {
   const counts: AlertCounts = { warnings: 0, errors: 0 };
-  if (!msg) return counts;
-  const names = msg.status.map((s) => s.name);
-  const isGroup = (s: DiagnosticStatus) => names.some((n) => n !== s.name && n.startsWith(`${s.name}/`));
-  for (const s of msg.status) {
-    if (isGroup(s)) continue;
-    if (s.level === DIAGNOSTIC_LEVEL.ERROR) counts.errors += 1;
-    else if (s.level === DIAGNOSTIC_LEVEL.WARN || s.level === DIAGNOSTIC_LEVEL.STALE) counts.warnings += 1;
+  for (const a of msg?.alerts ?? []) {
+    if (a.severity === ALERT_SEVERITY.ERROR) counts.errors += 1;
+    else if (a.severity === ALERT_SEVERITY.WARNING) counts.warnings += 1;
   }
   return counts;
 }

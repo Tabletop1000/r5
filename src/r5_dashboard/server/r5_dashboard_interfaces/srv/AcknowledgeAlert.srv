@@ -1,0 +1,5 @@
+# Mark an active alert as seen. It stays listed until the problem clears.
+string id
+---
+bool success
+string message

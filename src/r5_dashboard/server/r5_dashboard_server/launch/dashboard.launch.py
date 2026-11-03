@@ -1,4 +1,8 @@
-"""Start rosbridge (localhost only) and the dashboard server in front of it (spec D7)."""
+"""Start rosbridge (localhost only), the dashboard server in front of it (spec D7), and the
+robot-side nodes the dashboard uses: robot_status (usage, service schedule, alerts) and motor_test.
+
+On the simulator, pass use_sim_time:=true.
+"""
 
 from launch import LaunchDescription
 from launch.actions import DeclareLaunchArgument, IncludeLaunchDescription
@@ -21,7 +25,9 @@ def generate_launch_description():
         ),
         DeclareLaunchArgument("rosbridge_port", default_value="9090"),
         DeclareLaunchArgument("data_dir", default_value="~/.r5"),
+        DeclareLaunchArgument("use_sim_time", default_value="false"),
     ]
+    use_sim_time = LaunchConfiguration("use_sim_time")
 
     # Only reachable from the robot itself. Browsers connect through the dashboard server.
     rosbridge = IncludeLaunchDescription(
@@ -45,4 +51,20 @@ def generate_launch_description():
         ],
     )
 
-    return LaunchDescription(arguments + [rosbridge, server])
+    robot_status = Node(
+        package="r5_dashboard_server",
+        executable="robot_status",
+        output="both",
+        # Operating time and alert times use the wall clock even in simulation.
+        parameters=[{"data_dir": data_dir}],
+    )
+
+    # Wheel geometry and joint names match r5's diffbot_controllers.yaml.
+    motor_test = Node(
+        package="r5_dashboard_server",
+        executable="motor_test",
+        output="both",
+        parameters=[{"use_sim_time": use_sim_time}],
+    )
+
+    return LaunchDescription(arguments + [rosbridge, server, robot_status, motor_test])

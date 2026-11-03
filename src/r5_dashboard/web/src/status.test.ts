@@ -1,8 +1,5 @@
 import { describe, expect, it } from 'vitest';
 import { batteryPercent, countAlerts, formatAge, isStale, reconnectDelayMs, STALE_AFTER_MS } from './status';
-import type { DiagnosticStatus } from './ros/topics';
-
-const status = (name: string, level: number): DiagnosticStatus => ({ name, level, message: '', hardware_id: '' });
 
 describe('batteryPercent', () => {
   it('converts 0..1 to a whole percentage', () => {
@@ -19,25 +16,12 @@ describe('batteryPercent', () => {
 });
 
 describe('countAlerts', () => {
+  const alert = (severity: number) => ({ id: String(severity), severity, source: '', message: '', since: { sec: 0, nanosec: 0 }, acknowledged: false });
   it('returns zero for no message', () => {
     expect(countAlerts(null)).toEqual({ warnings: 0, errors: 0 });
   });
-  it('counts each fault once, ignoring the groups that repeat it', () => {
-    const msg = {
-      status: [
-        status('/Sensors', 2),
-        status('/Sensors/IMU', 2),
-        status('/Sensors/GPS', 1),
-        status('/Motors', 0),
-        status('/Motors/Left', 0),
-        status('/Computer', 3),
-      ],
-    };
-    expect(countAlerts(msg)).toEqual({ errors: 1, warnings: 2 });
-  });
-  it('does not treat a name prefix as a group', () => {
-    const msg = { status: [status('/Motor', 1), status('/MotorDriver', 1)] };
-    expect(countAlerts(msg)).toEqual({ errors: 0, warnings: 2 });
+  it('counts warnings and errors, not info', () => {
+    expect(countAlerts({ alerts: [alert(0), alert(1), alert(2), alert(2)] })).toEqual({ warnings: 1, errors: 2 });
   });
 });
 

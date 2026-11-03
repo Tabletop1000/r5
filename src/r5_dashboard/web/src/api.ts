@@ -44,3 +44,24 @@ export async function logout(): Promise<void> {
     // The cookie is dropped by the server; if the robot is unreachable there is nothing more to do.
   }
 }
+
+export async function changePassword(current: string, next: string): Promise<LoginResult> {
+  let resp: Response;
+  try {
+    resp = await fetch('/api/password', {
+      method: 'POST',
+      credentials: 'same-origin',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ current, new: next }),
+    });
+  } catch {
+    return { ok: false, message: "Can't reach the robot. Check the WiFi link and try again." };
+  }
+  if (resp.ok) return { ok: true };
+  try {
+    const body = (await resp.json()) as { error?: string };
+    return { ok: false, message: body.error ?? `Failed (${resp.status}).` };
+  } catch {
+    return { ok: false, message: `Failed (${resp.status}).` };
+  }
+}

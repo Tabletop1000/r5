@@ -1,6 +1,7 @@
 # R5 Dashboard
 
 Operator interface for the R5 robot. See [requirements.md](requirements.md) and [spec.md](spec.md).
+Work still needed on the robot itself is tracked in [TODO_ROBOT.md](TODO_ROBOT.md).
 
 The browser app talks to ROS through rosbridge. A small server on the robot sits in front of
 rosbridge: it serves the app over HTTPS, checks the password, and only then passes the browser's
@@ -15,7 +16,8 @@ browser ──HTTPS / WSS──► r5_dashboard_server (:8443) ──ws://127.0.
 | Path | Contents |
 | --- | --- |
 | `web/` | The browser app: TypeScript, React, Vite, roslib |
-| `server/r5_dashboard_server/` | ROS 2 (ament_python) package: HTTPS server, login, WebSocket proxy, launch file |
+| `server/r5_dashboard_server/` | ROS 2 (ament_python) package: HTTPS server, login, WebSocket proxy, the `robot_status` and `motor_test` nodes, launch file |
+| `server/r5_dashboard_interfaces/` | ROS 2 messages, services and actions between the dashboard and the robot |
 | `docker/` | Laptop image with ROS 2 Jazzy, rosbridge and the server's Python dependencies |
 
 ## Build the web app
@@ -42,7 +44,7 @@ dependencies.
    ln -s ~/git/r5_dashboard ~/git/r5/src/r5_dashboard
    cd ~/git/r5
    rosdep install --from-paths src --ignore-src -r -y --skip-keys "ros_gz_sim ros_gz_bridge gz_ros2_control"
-   colcon build --packages-select r5_dashboard_server
+   colcon build --packages-select r5_dashboard_interfaces r5_dashboard_server
    source install/setup.bash
    ```
 
@@ -54,7 +56,7 @@ dependencies.
    ros2 run r5_dashboard_server set_password
    ```
 
-4. Start rosbridge and the server:
+4. Start rosbridge, the server and the dashboard's robot-side nodes:
 
    ```bash
    ros2 launch r5_dashboard_server dashboard.launch.py
@@ -70,7 +72,17 @@ dependencies.
 | `https_port` | `8443` | Use 443 for a plain `https://<robot>` address; needs root or `CAP_NET_BIND_SERVICE` |
 | `http_port` | `8080` | Redirects to HTTPS. `0` turns it off. |
 | `rosbridge_port` | `9090` | Bound to 127.0.0.1 only |
-| `data_dir` | `~/.r5` | Password hash, sessions and TLS certificate |
+| `data_dir` | `~/.r5` | Password hash, sessions, TLS certificate, usage counters |
+| `use_sim_time` | `false` | Set `true` with the Gazebo simulation |
+
+### What the launch file starts
+
+| Node | Does |
+| --- | --- |
+| `rosbridge_websocket`, `rosapi` | The ROS link, on localhost only |
+| `server` | HTTPS, login, web app, WebSocket proxy |
+| `robot_status` | Operating hours, distance, service schedule (`/r5/stats`); active alerts from `/diagnostics_agg` and its own checks (`/r5/alerts`); services to record a service and acknowledge an alert |
+| `motor_test` | `/r5/motor_test` action: drives one side or both slowly for 2 s and checks the wheel speeds. Speed and time are fixed on the robot. |
 
 ### Files in the data directory
 
@@ -79,8 +91,11 @@ dependencies.
 | `dashboard_password.json` | scrypt hash of the password (never the password itself) |
 | `sessions.json` | Hashes of login session tokens; sessions last 30 days |
 | `tls/cert.pem`, `tls/key.pem` | Self-signed certificate, made on first start. Delete both to make a new one. |
+| `stats.json` | Operating time, distance, last service. Saved every minute and on shutdown. |
+| `service_log.json` | Every service recorded with "Service done" |
 
-All are readable only by the robot's user. To reset a forgotten password, run `set_password` again.
+All are readable only by the robot's user. To reset a forgotten password, run `set_password` again,
+or change it from the Robot page.
 
 ## Develop on the laptop
 
@@ -108,7 +123,7 @@ docker run -it --rm --net=host --ipc=host \
 colcon --log-base /tmp/log build --base-paths server --build-base /tmp/build --install-base /tmp/install
 source /tmp/install/setup.bash
 ros2 run r5_dashboard_server set_password --data-dir /data   # first time only
-ros2 launch r5_dashboard_server dashboard.launch.py data_dir:=/data
+ros2 launch r5_dashboard_server dashboard.launch.py data_dir:=/data use_sim_time:=true
 ```
 
 | Option | Purpose |
@@ -136,12 +151,29 @@ docker run --rm -e PYTHONDONTWRITEBYTECODE=1 --user $(id -u):$(id -g) \
   bash -c "cd /w/server/r5_dashboard_server && python3 -m pytest -p no:cacheprovider test"
 ```
 
-## Topics the status strip reads
+### Launching the robot sim
+```bash
+docker run -it --rm --net=host --ipc=host -v ~/r5_ws/r5:/home/jdutra/git/r5 --security-opt label=disable r5-laptop bash
+# inside:
+source install/setup.bash
+ros2 launch r5_simulation simulation.launch.py headless:=true
+```
 
-| Shown | Topic | Status |
+## ROS interfaces the dashboard uses
+
+Topic names and message types are in `web/src/ros/topics.ts`. Ones without a publisher on the
+robot yet show "Not available"; [TODO_ROBOT.md](TODO_ROBOT.md) lists them.
+
+| Shown | Interface | Source |
 | --- | --- | --- |
-| Battery | `/battery_state` (`sensor_msgs/BatteryState`) | No publisher on the robot yet |
-| Alerts | `/diagnostics_agg` (`diagnostic_msgs/DiagnosticArray`) | Needs `diagnostic_aggregator` running on the robot |
-| Current action | — | Comes from the job manager, not built yet |
-
-Items without data show "Not available". Names are in `web/src/ros/topics.ts`.
+| Usage, service schedule | `/r5/stats` | `robot_status` |
+| Alerts (strip and Robot page) | `/r5/alerts`, `/r5/alerts/acknowledge` | `robot_status`, which reads `/diagnostics_agg` |
+| Battery | `/battery_state` | Not published yet |
+| WiFi signal | `/r5/wifi_signal_dbm` | Not published yet |
+| Round trip | `/rosapi/get_time` | rosapi |
+| Versions | `/r5/versions` | Not published yet |
+| GPS | `/fix`, `/navpvt` | u-blox driver (`/navpvt` only on the real receiver) |
+| IMU | `/bno055/imu`, `/bno055/calib_status`, `/bno055/temp` | BNO055 driver (the simulator has only `imu`) |
+| Wheels | `/joint_states` | joint_state_broadcaster |
+| Motor test | `/r5/motor_test` | `motor_test` |
+| Current action | — | Job manager, not built yet |

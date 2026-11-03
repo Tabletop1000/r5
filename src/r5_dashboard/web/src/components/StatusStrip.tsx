@@ -1,7 +1,7 @@
 import type { ReactNode } from 'react';
 import { useNow } from '../hooks/useNow';
 import { useLinkState, useTopic } from '../ros/RobotContext';
-import { TOPICS, type BatteryState, type DiagnosticArray } from '../ros/topics';
+import { TOPICS, type AlertArray, type BatteryState } from '../ros/topics';
 import { batteryPercent, countAlerts, formatAge, isStale } from '../status';
 
 const NOT_AVAILABLE = 'Not available';
@@ -14,10 +14,10 @@ export function StatusStrip() {
   const now = useNow();
   const link = useLinkState();
   const battery = useTopic<BatteryState>(TOPICS.battery);
-  const diagnostics = useTopic<DiagnosticArray>(TOPICS.diagnostics);
+  const alertList = useTopic<AlertArray>(TOPICS.alerts);
 
   const percent = batteryPercent(battery.message);
-  const alerts = countAlerts(diagnostics.message);
+  const alerts = countAlerts(alertList.message);
   const alertTotal = alerts.errors + alerts.warnings;
 
   let linkText: string;
@@ -44,9 +44,9 @@ export function StatusStrip() {
       <StatusItem
         label="Alerts"
         tone={alerts.errors ? 'bad' : alerts.warnings ? 'warn' : 'neutral'}
-        stale={diagnostics.message !== null && isStale(diagnostics.receivedAt, now)}
+        stale={alertList.message !== null && isStale(alertList.receivedAt, now)}
       >
-        {diagnostics.message === null
+        {alertList.message === null
           ? NOT_AVAILABLE
           : alertTotal === 0
             ? 'None'

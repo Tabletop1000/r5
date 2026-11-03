@@ -178,3 +178,43 @@ class RedirectAppTest(AioHTTPTestCase):
         resp = await self.client.get("/robot?x=1", allow_redirects=False, headers={"Host": "r4:8080"})
         assert resp.status == 301
         assert resp.headers["Location"] == "https://r4:8443/robot?x=1"
+
+
+class ChangePasswordTest(DashboardAppTest):
+    async def change(self, token, current, new):
+        return await self.client.post(
+            "/api/password", json={"current": current, "new": new}, headers=self.auth_headers(token)
+        )
+
+    async def test_requires_login(self):
+        resp = await self.client.post("/api/password", json={"current": PASSWORD, "new": "another one"})
+        assert resp.status == 401
+
+    async def test_wrong_current_password(self):
+        _, token = await self.login()
+        resp = await self.change(token, "not it", "another one")
+        assert resp.status == 403
+        assert self.passwords.verify(PASSWORD)
+
+    async def test_too_short(self):
+        _, token = await self.login()
+        resp = await self.change(token, PASSWORD, "short")
+        assert resp.status == 400
+        assert self.passwords.verify(PASSWORD)
+
+    async def test_change_keeps_this_device_and_logs_out_others(self):
+        _, mine = await self.login()
+        _, other = await self.login()
+        resp = await self.change(mine, PASSWORD, "another one")
+        assert resp.status == 200
+        new_token = resp.cookies[SESSION_COOKIE].value
+        assert self.passwords.verify("another one")
+        assert not self.passwords.verify(PASSWORD)
+
+        async def authed(token):
+            r = await self.client.get("/api/session", headers=self.auth_headers(token))
+            return (await r.json())["authenticated"]
+
+        assert await authed(new_token)
+        assert not await authed(mine)
+        assert not await authed(other)

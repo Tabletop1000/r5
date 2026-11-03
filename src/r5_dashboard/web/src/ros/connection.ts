@@ -1,7 +1,7 @@
 // The single link to the robot's ROS system, through the dashboard server's /ws (spec D2, D7).
 // Reconnects by itself and keeps subscriptions across reconnects (spec NF-3).
 
-import { Ros, Topic } from 'roslib';
+import { Action, Ros, Service, Topic } from 'roslib';
 import { reconnectDelayMs } from '../status';
 
 export type LinkStatus = 'connecting' | 'connected' | 'disconnected';
@@ -60,6 +60,33 @@ export class RobotConnection {
 
   topic<T>(name: string, messageType: string, throttleMs = 0): Topic<T> {
     return this.ros.Topic<T>({ name, messageType, throttle_rate: throttleMs });
+  }
+
+  /** Calls a ROS service. Rejects with a readable message on failure or after timeoutMs. */
+  callService<TReq, TRes>(spec: { name: string; type: string }, request: TReq, timeoutMs = 5000): Promise<TRes> {
+    const service = new Service<TReq, TRes>({ ros: this.ros, name: spec.name, serviceType: spec.type });
+    return new Promise<TRes>((resolve, reject) => {
+      if (!this.ros.isConnected) {
+        reject(new Error('Not connected to the robot.'));
+        return;
+      }
+      const timer = setTimeout(() => reject(new Error('The robot did not answer in time.')), timeoutMs);
+      service.callService(
+        request,
+        (response) => {
+          clearTimeout(timer);
+          resolve(response);
+        },
+        (error) => {
+          clearTimeout(timer);
+          reject(new Error(error));
+        },
+      );
+    });
+  }
+
+  action<TGoal, TFeedback, TResult>(spec: { name: string; type: string }): Action<TGoal, TFeedback, TResult> {
+    return new Action<TGoal, TFeedback, TResult>({ ros: this.ros, name: spec.name, actionType: spec.type });
   }
 
   private async connect(): Promise<void> {

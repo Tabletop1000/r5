@@ -1,0 +1,28 @@
+# Spin one side of the robot, or both, slowly for a short fixed time (spec RB-9, RB-10).
+# Speed and duration are set on the robot and can't be changed by the goal.
+
+uint8 LEFT=0
+uint8 RIGHT=1
+uint8 BOTH=2
+
+uint8 side
+# true to drive forwards, false for reverse.
+bool forward
+---
+# false if the test was refused or the wheels didn't turn as commanded.
+bool success
+string message
+# Wheel ground speeds, in m/s: commanded, and the average measured over the second half of the test.
+# measured_* are only meaningful when measured_valid is true (no wheel speed readings otherwise).
+float32 commanded_left
+float32 commanded_right
+bool measured_valid
+float32 measured_left
+float32 measured_right
+---
+float32 elapsed_s
+float32 duration_s
+# Measured wheel ground speeds in m/s, when speeds_valid is true.
+bool speeds_valid
+float32 left_speed
+float32 right_speed
