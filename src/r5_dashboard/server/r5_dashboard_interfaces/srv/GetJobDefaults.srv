@@ -1,0 +1,7 @@
+# Starting values for the spray form: the field's last-used settings, or the robot's defaults.
+string field_id
+---
+SpraySettings settings
+float64 max_speed_kmh
+float64 pump_max_flow_l_min
+float64 tank_reserve_fraction

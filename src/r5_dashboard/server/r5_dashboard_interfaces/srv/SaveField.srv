@@ -1,0 +1,7 @@
+# Create (empty id) or replace (existing id) a field. The robot checks it before saving (spec FM-6).
+Field field
+---
+bool success
+string message
+# The field as saved, with id, area and times filled in.
+Field field

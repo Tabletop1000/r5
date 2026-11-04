@@ -1,0 +1,4 @@
+LatLon position
+---
+bool success
+string message
