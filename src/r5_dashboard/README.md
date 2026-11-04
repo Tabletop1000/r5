@@ -103,6 +103,24 @@ dependencies.
 | `home.geojson` | The home point |
 | `map.json` | Optional: map tile sources (see below) |
 
+### Importing and exporting fields
+
+On the Manage Fields page, **Export** saves a field as GeoJSON, the same format the robot stores,
+which opens in QGIS. **Import file** (under Add new field) reads a GeoJSON or KML polygon, for
+example from QGIS or Google Earth, and opens it in the editor to check and save:
+
+- Coordinates must be latitude/longitude (WGS 84, EPSG:4326). Files in other coordinate systems
+  are refused with a message saying so.
+- The largest polygon becomes the boundary. Holes in it, and smaller polygons, become keep-out
+  zones. The name comes from the file's `name` property or the file name.
+
+### When the WiFi link drops
+
+Everything runs on the robot, so jobs and recordings carry on. The dashboard pings the robot every
+few seconds. After 8 s with no reply it shows "Disconnected — robot continues on its own", even if
+the browser hasn't noticed the link has gone, and keeps trying to reconnect. When the link is back
+it reconnects by itself and shows the current state.
+
 ### Map tiles
 
 The map uses the OpenStreetMap street map by default, which needs internet on the device viewing

@@ -1137,6 +1137,58 @@ label.inline input {
   height: 20px;
 }
 
+/* ---- Import, link loss, touch ---- */
+
+label.button {
+  display: inline-flex;
+  align-items: center;
+  min-height: var(--touch);
+  padding: 0 1rem;
+  border-radius: var(--radius);
+  font-weight: 600;
+  cursor: pointer;
+}
+
+label.button.secondary {
+  background: var(--surface);
+  color: var(--text);
+  border: 1px solid var(--border);
+}
+
+.file-button input[type='file'] {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  opacity: 0;
+}
+
+.file-button:has(input:focus-visible) {
+  outline: 3px solid var(--focus);
+  outline-offset: 2px;
+}
+
+.link-lost {
+  margin: 8px 0;
+  padding: 8px 10px;
+  border-radius: var(--radius);
+  border-left: 4px solid var(--bad);
+  background: color-mix(in srgb, var(--bad) 10%, var(--surface));
+}
+
+/* Fingers need bigger targets than a mouse (spec NF-6). */
+@media (pointer: coarse) {
+  button.small,
+  .rename-row input,
+  .map-overlay select {
+    min-height: var(--touch);
+  }
+
+  .maplibregl-ctrl-group button {
+    width: 40px !important;
+    height: 40px !important;
+  }
+}
+
 /* ---- Narrow screens: menu becomes a bottom bar (spec NF-6) ---- */
 
 @media (max-width: 720px) {

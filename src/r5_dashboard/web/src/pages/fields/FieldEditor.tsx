@@ -16,12 +16,14 @@ interface Props {
   home: LatLon | null | undefined;
   /** The draft came from a finished recording on the robot, which is cleared once saved. */
   fromRecording?: boolean;
+  /** Things to point out about an imported shape. */
+  notices?: string[];
   onSaved: (field: FieldDraft) => void;
   onCancel: () => void;
 }
 
 /** Draw or edit a field: boundary, keep-out zones, headland width and name (spec FM-3, FM-5, FM-6). */
-export function FieldEditor({ initial, otherNames, startAt, home, fromRecording, onSaved, onCancel }: Props) {
+export function FieldEditor({ initial, otherNames, startAt, home, fromRecording, notices, onSaved, onCancel }: Props) {
   const robot = useRobot();
   const drawApi = useRef<DrawApi | null>(null);
   const [draft, setDraft] = useState<FieldDraft>(initial);
@@ -38,7 +40,7 @@ export function FieldEditor({ initial, otherNames, startAt, home, fromRecording,
   const onShapes = useCallback((s: DrawShapes) => setDraft((d) => ({ ...d, boundary: s.boundary, keepOut: s.keepOut })), []);
   const check = checkField(draft, otherNames);
   const isNew = !draft.id;
-  const changed = JSON.stringify(draft) !== JSON.stringify(initial);
+  const changed = JSON.stringify(draft) !== JSON.stringify(initial) || (isNew && initial.source === 'imported');
 
   async function save() {
     setSaving(true);
@@ -79,7 +81,7 @@ export function FieldEditor({ initial, otherNames, startAt, home, fromRecording,
       <div className="fields-side">
         <section className="card">
           <div className="card-head">
-            <h2>{isNew ? 'New field' : `Edit ${initial.name}`}</h2>
+            <h2>{isNew ? (initial.source === 'imported' ? 'Imported field' : 'New field') : `Edit ${initial.name}`}</h2>
           </div>
           <form
             className="form"
@@ -169,6 +171,11 @@ export function FieldEditor({ initial, otherNames, startAt, home, fromRecording,
               <span>Area: {check.areaM2 ? formatArea(check.areaM2) : '—'}</span>
               <span>Keep-out zones: {draft.keepOut.length}</span>
             </div>
+            {notices?.map((n) => (
+              <p key={n} className="warn-text small">
+                {n}
+              </p>
+            ))}
             {loadProblem && <p className="error">{loadProblem}</p>}
             {check.errors.length > 0 && (
               <ul className="problems errors">

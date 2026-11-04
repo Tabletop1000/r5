@@ -6,7 +6,9 @@ import { useFields } from '../../fields/useFields';
 import { FieldsLayer, FitTo, HomeMarker, RobotMarker } from '../../map/layers';
 import { MapView } from '../../map/MapView';
 import { PlanLayer } from '../../map/PlanLayer';
-import { useRobot, useTopic } from '../../ros/RobotContext';
+import { useNow } from '../../hooks/useNow';
+import { useLinkState, useRobot, useTopic } from '../../ros/RobotContext';
+import { formatAge } from '../../status';
 import { JOB_STATE, SERVICES, TOPICS, type CoveragePlan, type JobStatus, type TriggerResponse } from '../../ros/topics';
 import { formatDuration } from '../../spray/settings';
 
@@ -26,6 +28,8 @@ const STATE_LABEL: Record<number, string> = {
 /** A running (or just ended) job: progress, liquid, time left, pause/resume/stop (spec AS-6, AS-9). */
 export function JobMonitor({ status, onDone }: { status: JobStatus; onDone: () => void }) {
   const robot = useRobot();
+  const link = useLinkState();
+  const now = useNow();
   const { fields, home } = useFields();
   const plan = useTopic<CoveragePlan>(TOPICS.jobPlan).message;
   const [error, setError] = useState<string | null>(null);
@@ -36,6 +40,8 @@ export function JobMonitor({ status, onDone }: { status: JobStatus; onDone: () =
   const draft = useMemo(() => (field ? draftFromMsg(field) : null), [field]);
   const ended = status.state === JOB_STATE.FINISHED || status.state === JOB_STATE.FAILED || status.state === JOB_STATE.STOPPED;
   const tankFraction = status.tank_capacity_l > 0 ? status.tank_remaining_l / status.tank_capacity_l : 0;
+
+  const offline = link.status !== 'connected';
 
   async function call(service: { name: string; type: string }, request: object = {}) {
     setError(null);
@@ -56,6 +62,12 @@ export function JobMonitor({ status, onDone }: { status: JobStatus; onDone: () =
             {status.sprayer_on && ' · sprayer on'}
           </p>
           {status.message && <p className={status.state === JOB_STATE.FAILED ? 'error' : 'note-plain'}>{status.message}</p>}
+          {link.status !== 'connected' && !ended && (
+            <p className="link-lost" role="alert">
+              Link to the robot lost{link.lastContact ? ` ${formatAge(now - link.lastContact)} ago` : ''}. The robot carries on with the job by
+              itself; these figures are its last report and update again when the link returns.
+            </p>
+          )}
           <div className="meter" role="meter" aria-label="Progress" aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.round(status.progress * 100)}>
             <div className="meter-fill" style={{ width: `${status.progress * 100}%` }} />
             <span className="meter-caption">{Math.round(status.progress * 100)}% sprayed</span>
@@ -74,22 +86,22 @@ export function JobMonitor({ status, onDone }: { status: JobStatus; onDone: () =
           </dl>
           <div className="button-row job-actions">
             {status.state === JOB_STATE.WAITING_FOR_REFILL ? (
-              <button type="button" className="primary" onClick={() => { setRefilled(false); setConfirmRefill(true); }}>
+              <button type="button" className="primary" disabled={offline} onClick={() => { setRefilled(false); setConfirmRefill(true); }}>
                 Tank refilled — resume
               </button>
             ) : status.state === JOB_STATE.PAUSED ? (
-              <button type="button" className="primary" onClick={() => void call(SERVICES.resumeJob, { tank_refilled: false })}>
+              <button type="button" className="primary" disabled={offline} onClick={() => void call(SERVICES.resumeJob, { tank_refilled: false })}>
                 Resume
               </button>
             ) : (
               !ended && (
-                <button type="button" className="secondary" onClick={() => void call(SERVICES.pauseJob)}>
+                <button type="button" className="secondary" disabled={offline} onClick={() => void call(SERVICES.pauseJob)}>
                   Pause
                 </button>
               )
             )}
             {!ended && (
-              <button type="button" className="danger" onClick={() => void call(SERVICES.stop)}>
+              <button type="button" className="danger" disabled={offline} onClick={() => void call(SERVICES.stop)}>
                 Stop job
               </button>
             )}

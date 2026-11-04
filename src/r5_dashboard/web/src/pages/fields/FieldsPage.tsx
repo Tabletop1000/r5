@@ -4,6 +4,7 @@ import { ConfirmDialog } from '../../components/ConfirmDialog';
 import { FieldThumb } from '../../fields/FieldThumb';
 import { DEFAULT_HEADLAND_M, draftFromMsg, formatArea, msgFromDraft, type FieldDraft } from '../../fields/geo';
 import { formatDate } from '../../fields/time';
+import { exportFileName, fieldToGeoJson, ImportError, parseFieldFile } from '../../fields/importExport';
 import { useFields } from '../../fields/useFields';
 import { MapClickPicker } from '../../map/HomePlacer';
 import { FieldsLayer, FitTo, HomeMarker, RobotMarker, TrackLayer } from '../../map/layers';
@@ -13,6 +14,7 @@ import {
   RECORDING_STATE,
   SERVICES,
   TOPICS,
+  type FieldMsg,
   type LatLon,
   type NavSatFix,
   type RecordingStatus,
@@ -24,7 +26,7 @@ import { RecordingControls } from './RecordingPanel';
 
 type View =
   | { kind: 'list'; selectedId: string | null }
-  | { kind: 'edit'; draft: FieldDraft; fromRecording: boolean; returnTo: string | null };
+  | { kind: 'edit'; draft: FieldDraft; fromRecording: boolean; returnTo: string | null; notices?: string[] };
 
 const newDraft = (source: FieldDraft['source'], boundary: LatLon[] = []): FieldDraft => ({
   id: '',
@@ -51,8 +53,8 @@ export function FieldsPage() {
   const startAt = robotPosition ? [robotPosition] : home ? [home] : allPoints;
 
   const openEditor = useCallback(
-    (draft: FieldDraft, fromRecording = false) =>
-      setView((v) => ({ kind: 'edit', draft, fromRecording, returnTo: v.kind === 'list' ? v.selectedId : null })),
+    (draft: FieldDraft, fromRecording = false, notices?: string[]) =>
+      setView((v) => ({ kind: 'edit', draft, fromRecording, notices, returnTo: v.kind === 'list' ? v.selectedId : null })),
     [],
   );
 
@@ -66,6 +68,7 @@ export function FieldsPage() {
           startAt={startAt}
           home={home}
           fromRecording={view.fromRecording}
+          notices={view.notices}
           onSaved={(saved) => {
             setMessage(`Saved “${saved.name}”.`);
             setView({ kind: 'list', selectedId: saved.id });
@@ -126,6 +129,7 @@ export function FieldsPage() {
           {selected ? (
             <FieldDetails
               field={selected}
+              msg={fields!.find((f) => f.id === selected.id)!}
               areaM2={fields!.find((f) => f.id === selected.id)!.area_m2}
               created={fields!.find((f) => f.id === selected.id)!.created}
               modified={fields!.find((f) => f.id === selected.id)!.modified}
@@ -144,6 +148,7 @@ export function FieldsPage() {
                 canRecord={link.status === 'connected'}
                 onDraw={() => openEditor(newDraft('drawn'))}
                 onRecordStarted={() => setMessage(null)}
+                onImported={(draft, notices) => openEditor(draft, false, notices)}
               />
             )
           )}
@@ -187,9 +192,34 @@ function HomePlacing() {
   return <MapClickPicker active={active} onPick={pick} />;
 }
 
-function AddFieldCard({ canRecord, onDraw, onRecordStarted }: { canRecord: boolean; onDraw: () => void; onRecordStarted: () => void }) {
+function AddFieldCard({
+  canRecord,
+  onDraw,
+  onRecordStarted,
+  onImported,
+}: {
+  canRecord: boolean;
+  onDraw: () => void;
+  onRecordStarted: () => void;
+  onImported: (draft: FieldDraft, notices: string[]) => void;
+}) {
   const robot = useRobot();
   const [error, setError] = useState<string | null>(null);
+
+  async function importFile(file: File | undefined) {
+    if (!file) return;
+    setError(null);
+    if (file.size > 5_000_000) return setError('That file is too big for a field (over 5 MB).');
+    try {
+      const f = parseFieldFile(await file.text(), file.name);
+      onImported(
+        { ...newDraft('imported', f.boundary), name: f.name, keepOut: f.keepOut, headlandWidthM: f.headlandWidthM, notes: f.notes },
+        f.notices,
+      );
+    } catch (err) {
+      setError(err instanceof ImportError ? err.message : `Couldn't read the file: ${(err as Error).message}`);
+    }
+  }
   async function startRecording() {
     setError(null);
     try {
@@ -218,6 +248,20 @@ function AddFieldCard({ canRecord, onDraw, onRecordStarted }: { canRecord: boole
           </button>
           <p className="muted small">Click the corners of the field on the map.</p>
         </div>
+        <div>
+          <label className="button secondary file-button">
+            Import file
+            <input
+              type="file"
+              accept=".geojson,.json,.kml,application/geo+json,application/vnd.google-earth.kml+xml"
+              onChange={(e) => {
+                void importFile(e.target.files?.[0]);
+                e.target.value = '';
+              }}
+            />
+          </label>
+          <p className="muted small">A GeoJSON or KML polygon, e.g. from QGIS or Google Earth, in latitude/longitude (WGS 84).</p>
+        </div>
       </div>
       {error && <p className="error">{error}</p>}
     </Card>
@@ -226,6 +270,7 @@ function AddFieldCard({ canRecord, onDraw, onRecordStarted }: { canRecord: boole
 
 function FieldDetails({
   field,
+  msg,
   areaM2,
   created,
   modified,
@@ -235,6 +280,7 @@ function FieldDetails({
   onRenamed,
 }: {
   field: FieldDraft;
+  msg: FieldMsg;
   areaM2: number;
   created: { sec: number; nanosec: number };
   modified: { sec: number; nanosec: number };
@@ -347,6 +393,9 @@ function FieldDetails({
           >
             Rename
           </button>
+          <button type="button" className="secondary" onClick={() => downloadText(fieldToGeoJson(msg), exportFileName(field.name), 'application/geo+json')}>
+            Export
+          </button>
           <button type="button" className="secondary danger-text" onClick={() => setConfirmDelete(true)}>
             Delete
           </button>
@@ -414,4 +463,16 @@ function HomeCard({ home, robotPosition }: { home: LatLon | null | undefined; ro
       {error && <p className="error">{error}</p>}
     </Card>
   );
+}
+
+/** Saves text as a file through the browser (spec FM-9 export). */
+function downloadText(text: string, fileName: string, type: string) {
+  const url = URL.createObjectURL(new Blob([text], { type }));
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = fileName;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
 }

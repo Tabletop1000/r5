@@ -1,8 +1,30 @@
 // The single link to the robot's ROS system, through the dashboard server's /ws (spec D2, D7).
 // Reconnects by itself and keeps subscriptions across reconnects (spec NF-3).
+//
+// A watchdog pings the robot every few seconds. If nothing at all has arrived for LINK_TIMEOUT_MS,
+// the link is treated as lost even if the browser still thinks the socket is open (which happens
+// when WiFi fades out), and a new connection is started (spec AS-7).
 
 import { Action, Ros, Service, Topic } from 'roslib';
 import { reconnectDelayMs } from '../status';
+import { SERVICES } from './topics';
+import { WatchedTransport } from './transport';
+
+export const PING_AFTER_MS = 2500;
+export const LINK_TIMEOUT_MS = 8000;
+export const CONNECT_TIMEOUT_MS = 10000;
+const WATCHDOG_PERIOD_MS = 1000;
+
+export type WatchdogAction = 'none' | 'ping' | 'drop';
+
+/** What the watchdog should do, given how long ago anything arrived. Pure, for testing. */
+export function watchdogAction(o: { connected: boolean; connecting: boolean; sinceActivityMs: number; sinceAttemptMs: number; pinging: boolean }): WatchdogAction {
+  if (o.connecting) return o.sinceAttemptMs > CONNECT_TIMEOUT_MS ? 'drop' : 'none';
+  if (!o.connected) return 'none';
+  if (o.sinceActivityMs > LINK_TIMEOUT_MS) return 'drop';
+  if (o.sinceActivityMs > PING_AFTER_MS && !o.pinging) return 'ping';
+  return 'none';
+}
 
 export type LinkStatus = 'connecting' | 'connected' | 'disconnected';
 
@@ -20,7 +42,18 @@ export interface RobotConnectionOptions {
 }
 
 export class RobotConnection {
-  private readonly ros = new Ros();
+  private transport: WatchedTransport | null = null;
+  private lastActivity = 0;
+  private attemptStarted = 0;
+  private pinging = false;
+  private watchdog: ReturnType<typeof setInterval> | undefined;
+  private readonly ros = new Ros({
+    transportFactory: async (url: string) => {
+      this.attemptStarted = Date.now();
+      this.transport = new WatchedTransport(new WebSocket(url), () => (this.lastActivity = Date.now()));
+      return this.transport;
+    },
+  });
   private state: LinkState = { status: 'connecting', lastContact: null };
   private readonly listeners = new Set<() => void>();
   private attempt = 0;
@@ -49,13 +82,36 @@ export class RobotConnection {
 
   start(): void {
     this.stopped = false;
+    clearInterval(this.watchdog);
+    this.watchdog = setInterval(() => this.checkLink(), WATCHDOG_PERIOD_MS);
     void this.connect();
   }
 
   stop(): void {
     this.stopped = true;
     clearTimeout(this.timer);
+    clearInterval(this.watchdog);
     this.ros.close();
+  }
+
+  private checkLink(): void {
+    const now = Date.now();
+    const action = watchdogAction({
+      connected: this.state.status === 'connected',
+      connecting: this.transport?.isConnecting() ?? false,
+      sinceActivityMs: now - this.lastActivity,
+      sinceAttemptMs: now - this.attemptStarted,
+      pinging: this.pinging,
+    });
+    if (action === 'drop') {
+      this.transport?.abandon('no response from the robot');
+    } else if (action === 'ping') {
+      // Any reply counts as activity; the answer itself doesn't matter.
+      this.pinging = true;
+      this.callService(SERVICES.getTime, {}, LINK_TIMEOUT_MS)
+        .catch(() => undefined)
+        .finally(() => (this.pinging = false));
+    }
   }
 
   topic<T>(name: string, messageType: string, throttleMs = 0): Topic<T> {
@@ -106,7 +162,7 @@ export class RobotConnection {
 
   private handleDrop(): void {
     if (this.stopped) return;
-    const lastContact = this.state.status === 'connected' ? Date.now() : this.state.lastContact;
+    const lastContact = this.state.status === 'connected' ? this.lastActivity || Date.now() : this.state.lastContact;
     this.setState({ status: lastContact ? 'disconnected' : 'connecting', lastContact });
     clearTimeout(this.timer);
     const delay = reconnectDelayMs(this.attempt++);
