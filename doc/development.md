@@ -37,10 +37,12 @@ docker build -t r5-laptop docker
 
 ```bash
 xhost +si:localuser:root
+mkdir -p ~/.r5-dev
 docker run -it --rm --net=host --ipc=host \
   -e DISPLAY --device /dev/dri \
   -v /tmp/.X11-unix:/tmp/.X11-unix:ro \
   -v ~/r5_ws/r5:/home/jdutra/git/r5 \
+  -v ~/.r5-dev:/root/.r5 \
   --security-opt label=disable \
   r5-laptop bash
 ```
@@ -51,6 +53,7 @@ docker run -it --rm --net=host --ipc=host \
 | `--net=host`, `--ipc=host` | Puts the container on the laptop's network, so it can see the robot's topics |
 | `-e DISPLAY`, `/tmp/.X11-unix`, `/dev/dri` | Display and GPU access for RViz |
 | `-v ~/r5_ws/r5:/home/jdutra/git/r5` | Mounts the repository at the same path it has on the robot |
+| `-v ~/.r5-dev:/root/.r5` | Keeps the simulated dashboard's password, fields and settings between containers |
 | `--security-opt label=disable` | Stops SELinux blocking access to the mounted folders on Fedora |
 | `--rm` | Removes the container on exit. The mounted repository is kept, and anything installed with `apt` is lost, so add permanent packages to the Dockerfile. |
 
@@ -302,8 +305,9 @@ Keep the wheels off the ground for the first run after any change to the hardwar
 
 ## Simulation
 
-`r5_simulation` runs the robot in Gazebo Harmonic on the laptop, with the real localisation and Nav2
-launch files. Gazebo stands in for the motors, IMU and GPS.
+`r5_simulation` runs the robot in Gazebo Harmonic on the laptop, with the same launch file as the
+robot for everything above the hardware (`r5_bringup/launch/stack.launch.py`): localisation, Nav2,
+`twist_mux`, monitoring and the dashboard. Gazebo stands in for the motors, IMU and GPS.
 
 The container shares the laptop's network, so a simulation on the robot's `ROS_DOMAIN_ID` can send
 `/cmd_vel` and goals to the real robot. Use a different domain in every terminal for the simulation:
@@ -312,16 +316,28 @@ The container shares the laptop's network, so a simulation on the robot's `ROS_D
 export ROS_DOMAIN_ID=42
 ```
 
-Build, then start the simulation:
+Build the dashboard's web app on the laptop, outside the container, the first time and whenever it
+changes. It needs Node.js 22:
+
+```bash
+cd ~/r5_ws/r5/src/r5_dashboard/web
+npm install
+npm run build
+```
+
+Then, in the container, build, set the dashboard password once, and start the simulation:
 
 ```bash
 colcon build
 source install/setup.bash
+ros2 run r5_dashboard_server set_password   # first time only
 ros2 launch r5_simulation simulation.launch.py
 ```
 
-Add `headless:=true` to run it without the Gazebo window. The robot starts at the world origin facing
-east, and Nav2 is ready when the log shows `Managed nodes are active`.
+The dashboard is at `https://localhost:8443`. Accept the certificate warning the first time. Add
+`headless:=true` to run without the Gazebo window, or `dashboard:=false` to leave the dashboard out.
+The robot starts at the world origin facing east, and Nav2 is ready when the log shows
+`Managed nodes are active`.
 
 Send a goal from a second terminal, in the same domain:
 

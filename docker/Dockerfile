@@ -1,4 +1,5 @@
-# ROS 2 Jazzy for the laptop: RViz and tools, plus what's needed to build and test r5.
+# ROS 2 Jazzy for the laptop: RViz and tools, plus what's needed to build, test and simulate r5,
+# including the dashboard.
 # See doc/development.md.
 FROM osrf/ros:jazzy-desktop
 # Upgrade first, because ROS packages from different dates can crash with symbol errors.
@@ -11,6 +12,9 @@ RUN apt-get update && DEBIAN_FRONTEND=noninteractive apt-get upgrade -y \
     liburdfdom-tools \
     netcat-openbsd \
     openssh-client \
+    python3-aiohttp \
+    python3-cryptography \
+    python3-pytest \
     tcpdump \
     traceroute \
     ros-jazzy-ament-cmake-pytest \
@@ -19,6 +23,7 @@ RUN apt-get update && DEBIAN_FRONTEND=noninteractive apt-get upgrade -y \
     ros-jazzy-controller-manager \
     ros-jazzy-diagnostic-aggregator \
     ros-jazzy-diff-drive-controller \
+    ros-jazzy-fields2cover \
     ros-jazzy-gz-ros2-control \
     ros-jazzy-hardware-interface \
     ros-jazzy-joint-state-broadcaster \
@@ -39,6 +44,7 @@ RUN apt-get update && DEBIAN_FRONTEND=noninteractive apt-get upgrade -y \
     ros-jazzy-robot-localization \
     ros-jazzy-ros-gz-bridge \
     ros-jazzy-ros-gz-sim \
+    ros-jazzy-rosbridge-server \
     ros-jazzy-teleop-twist-joy \
     ros-jazzy-teleop-twist-keyboard \
     ros-jazzy-twist-mux \

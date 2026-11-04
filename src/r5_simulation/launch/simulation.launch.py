@@ -1,7 +1,6 @@
 from launch import LaunchDescription
 from launch.actions import (
     DeclareLaunchArgument,
-    GroupAction,
     IncludeLaunchDescription,
     RegisterEventHandler,
 )
@@ -15,7 +14,7 @@ from launch.substitutions import (
     PythonExpression,
 )
 
-from launch_ros.actions import Node, SetParameter
+from launch_ros.actions import Node
 from launch_ros.parameter_descriptions import ParameterValue
 from launch_ros.substitutions import FindPackageShare
 
@@ -29,6 +28,11 @@ def generate_launch_description():
             "headless",
             default_value="false",
             description="Run Gazebo without its window.",
+        ),
+        DeclareLaunchArgument(
+            "dashboard",
+            default_value="true",
+            description="Start the dashboard, at https://localhost:8443.",
         ),
         DeclareLaunchArgument(
             "joystick",
@@ -124,42 +128,19 @@ def generate_launch_description():
         )
     )
 
-    # The robot's own launch files, unchanged except for simulated time. Gazebo replaces
-    # diffbot.launch.py and the sensor drivers, and the dashboard runs separately.
-    robot_stack = GroupAction(
-        [
-            SetParameter(name="use_sim_time", value=True),
-            IncludeLaunchDescription(
-                PythonLaunchDescriptionSource(
-                    PathJoinSubstitution(
-                        [FindPackageShare("r5_localisation"), "launch", "localisation.launch.py"]
-                    )
-                ),
-                launch_arguments={"navsat_params": navsat_params}.items(),
-            ),
-            IncludeLaunchDescription(
-                PythonLaunchDescriptionSource(
-                    PathJoinSubstitution(
-                        [FindPackageShare("r5_navigation"), "launch", "navigation.launch.py"]
-                    )
-                )
-            ),
-            IncludeLaunchDescription(
-                PythonLaunchDescriptionSource(
-                    PathJoinSubstitution(
-                        [FindPackageShare("r5_bringup"), "launch", "command.launch.py"]
-                    )
-                ),
-                launch_arguments={"joystick": LaunchConfiguration("joystick")}.items(),
-            ),
-            IncludeLaunchDescription(
-                PythonLaunchDescriptionSource(
-                    PathJoinSubstitution(
-                        [FindPackageShare("r5_bringup"), "launch", "monitor.launch.py"]
-                    )
-                )
-            ),
-        ]
+    # Everything above the hardware, as on the robot, including the dashboard.
+    robot_stack = IncludeLaunchDescription(
+        PythonLaunchDescriptionSource(
+            PathJoinSubstitution([FindPackageShare("r5_bringup"), "launch", "stack.launch.py"])
+        ),
+        launch_arguments={
+            "use_sim_time": "true",
+            "navsat_params": navsat_params,
+            "dashboard": LaunchConfiguration("dashboard"),
+            "joystick": LaunchConfiguration("joystick"),
+            "fix_requirement": "any",
+            "sprayer_stub": "true",
+        }.items(),
     )
 
     return LaunchDescription(

@@ -18,7 +18,6 @@ browser ──HTTPS / WSS──► r5_dashboard_server (:8443) ──ws://127.0.
 | `web/` | The browser app: TypeScript, React, Vite, roslib |
 | `server/r5_dashboard_server/` | ROS 2 (ament_python) package: HTTPS server, login, WebSocket proxy, the `robot_status`, `motor_test` and `field_manager` nodes, launch file |
 | `server/r5_dashboard_interfaces/` | ROS 2 messages, services and actions between the dashboard and the robot |
-| `docker/` | Laptop image with ROS 2 Jazzy, rosbridge and the server's Python dependencies |
 
 ## Build the web app
 
@@ -156,49 +155,15 @@ or change it from the Robot page.
 
 ## Develop on the laptop
 
-### Run the server against the simulation
-
-Build the image once:
-
-```bash
-docker build -t r5-dashboard-dev docker
-```
-
-Create the data folder first. If Docker creates it, it belongs to root and the dashboard can't
-save anything there:
-
-```bash
-mkdir -p ~/.r5-dev
-```
-
-Start the simulation in the `r5-laptop` container as usual (see the `r5` repository's
-`doc/development.md`; `headless:=true` works), on the simulation's `ROS_DOMAIN_ID` of 42, so it
-can't reach the real robot. Then, in a second terminal:
-
-```bash
-docker run -it --rm --net=host --ipc=host \
-  --user $(id -u):$(id -g) -e HOME=/tmp \
-  -e FASTDDS_BUILTIN_TRANSPORTS=UDPv4 -e ROS_DOMAIN_ID=42 \
-  -v ~/r5_ws/r5/src/r5_dashboard:/home/jdutra/r5_ws/r5_dashboard \
-  -v ~/.r5-dev:/data \
-  --security-opt label=disable \
-  r5-dashboard-dev bash
-
-# inside the container
-colcon --log-base /tmp/log build --base-paths server --build-base /tmp/build --install-base /tmp/install
-source /tmp/install/setup.bash
-ros2 run r5_dashboard_server set_password --data-dir /data   # first time only
-ros2 launch r5_dashboard_server dashboard.launch.py data_dir:=/data use_sim_time:=true fix_requirement:=any sprayer_stub:=true
-```
-
-| Option | Purpose |
-| --- | --- |
-| `--user`, `-e HOME=/tmp` | Files created in the mounted folders belong to you, not root |
-| `FASTDDS_BUILTIN_TRANSPORTS=UDPv4` | The simulation container runs as root. Fast DDS shared memory doesn't work between different users, so topics are discovered but no data arrives without this. |
+The `r5-laptop` image has everything the dashboard needs, and the simulation starts the dashboard
+with the robot. See the Simulation section of the `r5` repository's `doc/development.md`: build the
+web app, then `ros2 launch r5_simulation simulation.launch.py`, and browse to
+`https://localhost:8443`.
 
 ### Live-reloading web app
 
-With the server running, start Vite, which passes `/api` and `/ws` through to it:
+With the simulation running, start Vite on the laptop, which passes `/api` and `/ws` through to the
+dashboard server:
 
 ```bash
 cd web
@@ -210,21 +175,12 @@ Set `R5_DASHBOARD_SERVER` to point Vite at another server, for example the real 
 
 ### Server tests
 
-```bash
-docker run --rm -e PYTHONDONTWRITEBYTECODE=1 --user $(id -u):$(id -g) \
-  -v ~/r5_ws/r5/src/r5_dashboard:/w --security-opt label=disable r5-dashboard-dev \
-  bash -c "cd /w/server/r5_dashboard_server && python3 -m pytest -p no:cacheprovider test"
-```
+In the `r5-laptop` container:
 
-### Launching the robot sim
 ```bash
-docker run -it --rm --net=host --ipc=host -e ROS_DOMAIN_ID=42 -v ~/r5_ws/r5:/home/jdutra/git/r5 --security-opt label=disable r5-laptop bash
-# inside:
-source install/setup.bash
-ros2 launch r5_simulation simulation.launch.py headless:=true
+cd src/r5_dashboard/server/r5_dashboard_server
+python3 -m pytest -p no:cacheprovider test
 ```
-
-The simulation includes `twist_mux`, so the motor test and Stop work as on the robot.
 
 ## ROS interfaces the dashboard uses
 

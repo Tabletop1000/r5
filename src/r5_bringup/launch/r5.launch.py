@@ -1,6 +1,5 @@
 from launch import LaunchDescription
 from launch.actions import DeclareLaunchArgument, IncludeLaunchDescription
-from launch.conditions import IfCondition
 from launch.launch_description_sources import PythonLaunchDescriptionSource
 from launch.substitutions import LaunchConfiguration, PathJoinSubstitution
 
@@ -16,7 +15,9 @@ def include_launch(package, launch_file, **kwargs):
     )
 
 
+# The real robot: motor hardware and sensor drivers, then everything above them (stack.launch.py).
 def generate_launch_description():
+    stack_arguments = ["dashboard", "joystick", "fix_requirement", "sprayer_stub"]
     declared_arguments = [
         DeclareLaunchArgument(
             "dashboard",
@@ -28,8 +29,6 @@ def generate_launch_description():
             default_value="true",
             description="Start the Xbox controller nodes.",
         ),
-        # The M9N can't give an RTK fix, so recording and spray jobs accept any fix until the
-        # ZED-F9 is fitted. Change to rtk_fixed then.
         DeclareLaunchArgument(
             "fix_requirement",
             default_value="any",
@@ -48,22 +47,12 @@ def generate_launch_description():
             include_launch("r5", "diffbot.launch.py"),
             include_launch("r5_sensors", "bno055_imu_node-launch.py"),
             include_launch("r5_sensors", "ublox_gps_node-launch.py"),
-            include_launch("r5_localisation", "localisation.launch.py"),
-            include_launch("r5_navigation", "navigation.launch.py"),
             include_launch(
                 "r5_bringup",
-                "command.launch.py",
-                launch_arguments={"joystick": LaunchConfiguration("joystick")}.items(),
-            ),
-            include_launch("r5_bringup", "monitor.launch.py"),
-            include_launch(
-                "r5_dashboard_server",
-                "dashboard.launch.py",
+                "stack.launch.py",
                 launch_arguments={
-                    "fix_requirement": LaunchConfiguration("fix_requirement"),
-                    "sprayer_stub": LaunchConfiguration("sprayer_stub"),
+                    name: LaunchConfiguration(name) for name in stack_arguments
                 }.items(),
-                condition=IfCondition(LaunchConfiguration("dashboard")),
             ),
         ]
     )
