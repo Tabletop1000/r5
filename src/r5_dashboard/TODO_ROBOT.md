@@ -7,7 +7,7 @@ delivery plan in [spec.md](spec.md) section 9.
 Each item says what the dashboard expects, so the two sides meet without guesswork. Until an item
 is done, the dashboard shows "Not available" for it rather than failing.
 
-Last updated: 2026-11-04 (after delivery step 3, Manage Fields).
+Last updated: 2026-11-04 (after delivery step 4, Area Spray).
 
 ## Status data
 
@@ -76,7 +76,7 @@ Last updated: 2026-11-04 (after delivery step 3, Manage Fields).
     recording. Change `joy_record_button` if Y is used for something else, or set it to −1 to turn
     this off. Make sure the record button isn't also the deadman or a drive button.
 - [ ] **RTK for recording.** `field_manager` only keeps positions with an RTK fixed solution by
-  default (`record_fix_requirement`). It tells RTK fixed from float using `/navpvt`
+  default (launch argument `fix_requirement`; spray jobs use the same setting). It tells RTK fixed from float using `/navpvt`
   (`ublox_msgs/NavPVT`), so the u-blox driver must publish it and `ublox_msgs` must be installed
   where `field_manager` runs. Without `/navpvt` it can only see "corrections in use" from `/fix`.
 - [ ] **Simulator GPS noise (optional, for testing).** The simulated GPS has 1.5 m noise, so a
@@ -99,15 +99,46 @@ Last updated: 2026-11-04 (after delivery step 3, Manage Fields).
   has no real-time clock.
 - [ ] Back up `~/.r5` (stats, service log, password hash, certificate), and later fields.
 
+## Spray jobs (step 4)
+
+The dashboard's `job_manager` plans with Fields2Cover and drives with the robot's existing Nav2
+setup. It was tested end to end in the simulator (rows, turns, pause/resume, refill trip, stop).
+These robot-side items decide how well it works on the real robot:
+
+- [ ] **Install Fields2Cover on the robot**: `ros-jazzy-fields2cover` (rosdep key `fields2cover`).
+  `job_manager` uses its Python bindings, which the apt package includes.
+- [ ] **Nav2 tuning for coverage** (`r5_navigation/params/nav2_params.yaml`):
+  - `general_goal_checker.xy_goal_tolerance` is 1.5 m. `job_manager` extends each row by that much
+    plus 0.5 m and switches the sprayer by position, so rows are still sprayed to the end. A
+    tighter tolerance (e.g. 0.3 m) would let it use shorter lead-ins and lead-outs. Its
+    `goal_tolerance_m` parameter must match.
+  - `FollowPath.lookahead_dist` is 2.0 m, more than the 1.5 m row spacing. Turns will be cut
+    short and rows joined late. Consider ~0.6–1.0 m for coverage, or a second controller
+    plugin for coverage with its own settings (set `job_manager`'s `controller_id`).
+  - `desired_linear_vel` 0.3 m/s caps the spray speed at 1.08 km/h. `job_manager` lowers it per
+    job through `/speed_limit`. Raise it if spraying should go faster, and update
+    `job_manager`'s `max_speed_kmh`.
+- [ ] **`/fromLL`.** `job_manager` converts field coordinates to the `map` frame with
+  navsat_transform's `/fromLL` service, which is available in the simulator. Make sure it is on the
+  robot too, and that the `map` frame is the one Nav2 uses.
+- [ ] **Twist mux.** `job_manager` publishes zero velocity on `/cmd_vel` when STOP is pressed, and
+  cancels all Nav2 goals. With `twist_mux`, point it at a high-priority input instead (see Motion
+  and safety).
+- [ ] **Sprayer hardware** (spec 5.5). Subscribe to `/r5/sprayer/enable` (`std_msgs/Bool`,
+  latched) and `/r5/sprayer/flow_setpoint` (`std_msgs/Float32`, L/min). The setpoint follows the
+  robot's actual ground speed, so the rate per m² holds when it slows down. Then set
+  `job_manager`'s `sprayer_is_placeholder` to false and its boom width, tank and pump limits.
+- [ ] **Tank level sensor (later).** Liquid is estimated from flow × time today.
+- [ ] **Turning radius.** `job_manager`'s `turn_radius_m` (1.0 m) shapes the planned turns. For a
+  skid-steer robot that can pivot, smaller is possible, but the controller must be able to follow it.
+- [ ] **Battery minimum.** Jobs are refused below `min_battery_percent` (30%) once `/battery_state`
+  is published; until then the check is a warning.
+- [ ] **Route home.** Trips home use `NavigateToPose` with the global costmap, which has no
+  obstacles. Keep the route between fields and home clear (spec AS-9).
+
 ## Coming with later dashboard steps
 
 These are listed now so the hardware and robot configuration can be planned. Details will be
 filled in as each step is designed.
 
-- [ ] **Step 4, Area Spray:**
-  - Fields2Cover integration.
-  - Sprayer placeholder interfaces from spec 5.5: `/r5/sprayer/enable` (`std_msgs/Bool`) and
-    `/r5/sprayer/flow_setpoint` (`std_msgs/Float32`, L/min), and a stub for the simulator.
-  - Nav2 navigation to the home point for refills (spec AS-9).
-- [ ] **Step 4, motor test interlock:** once the job manager exists, refuse motor tests while a job
-  is running (spec RB-10).
+- [ ] **Mow and Spot Spray** (spec MW-1, SS-1): robot interfaces to be defined when those pages are designed.

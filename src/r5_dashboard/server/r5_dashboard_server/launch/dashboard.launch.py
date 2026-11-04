@@ -1,12 +1,13 @@
 """Start rosbridge (localhost only), the dashboard server in front of it (spec D7), and the
 robot-side nodes the dashboard uses: robot_status (usage, service schedule, alerts), motor_test,
-and field_manager (fields, home point, boundary recording).
+field_manager (fields, home point, boundary recording) and job_manager (spray jobs).
 
-On the simulator, pass use_sim_time:=true record_fix_requirement:=any.
+On the simulator, pass use_sim_time:=true fix_requirement:=any sprayer_stub:=true.
 """
 
 from launch import LaunchDescription
 from launch.actions import DeclareLaunchArgument, IncludeLaunchDescription
+from launch.conditions import IfCondition
 from launch.launch_description_sources import AnyLaunchDescriptionSource
 from launch.substitutions import LaunchConfiguration, PathJoinSubstitution
 from launch_ros.actions import Node
@@ -28,11 +29,17 @@ def generate_launch_description():
         DeclareLaunchArgument("data_dir", default_value="~/.r5"),
         DeclareLaunchArgument("use_sim_time", default_value="false"),
         DeclareLaunchArgument(
-            "record_fix_requirement",
+            "fix_requirement",
             default_value="rtk_fixed",
-            description="Worst GPS fix accepted when recording a boundary: rtk_fixed, rtk_float or any.",
+            description="Worst GPS fix accepted for recording boundaries and running jobs: rtk_fixed, rtk_float or any.",
+        ),
+        DeclareLaunchArgument(
+            "sprayer_stub",
+            default_value="false",
+            description="Start a stand-in that logs sprayer commands, until the sprayer exists.",
         ),
     ]
+    fix_requirement = LaunchConfiguration("fix_requirement")
     use_sim_time = LaunchConfiguration("use_sim_time")
 
     # Only reachable from the robot itself. Browsers connect through the dashboard server.
@@ -78,8 +85,25 @@ def generate_launch_description():
         executable="field_manager",
         output="both",
         parameters=[
-            {"data_dir": data_dir, "record_fix_requirement": LaunchConfiguration("record_fix_requirement")}
+            {"data_dir": data_dir, "record_fix_requirement": fix_requirement}
         ],
     )
 
-    return LaunchDescription(arguments + [rosbridge, server, robot_status, motor_test, field_manager])
+    job_manager = Node(
+        package="r5_dashboard_server",
+        executable="job_manager",
+        output="both",
+        # Wheel and sprayer values are placeholders until the sprayer is built (spec 5.5).
+        parameters=[{"data_dir": data_dir, "job_fix_requirement": fix_requirement, "use_sim_time": use_sim_time}],
+    )
+
+    sprayer_stub = Node(
+        package="r5_dashboard_server",
+        executable="sprayer_stub",
+        output="both",
+        condition=IfCondition(LaunchConfiguration("sprayer_stub")),
+    )
+
+    return LaunchDescription(
+        arguments + [rosbridge, server, robot_status, motor_test, field_manager, job_manager, sprayer_stub]
+    )

@@ -1053,9 +1053,98 @@ a.button.primary {
   }
 }
 
+/* ---- Spray page and Stop ---- */
+
+.stop-button {
+  margin-left: auto;
+  align-self: center;
+  min-height: var(--touch);
+  padding: 0 1.4rem;
+  border: none;
+  border-radius: var(--radius);
+  background: var(--bad);
+  color: #fff;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--bad) 30%, transparent);
+}
+
+.form select {
+  font: inherit;
+  font-weight: 400;
+  min-height: var(--touch);
+  padding: 0 0.6rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--bg);
+  color: var(--text);
+}
+
+.form label.inline,
+label.inline {
+  flex-direction: row;
+  align-items: center;
+  gap: 8px;
+  font-weight: 500;
+  min-height: 36px;
+}
+
+.label-text {
+  font-weight: 600;
+  display: block;
+  margin-bottom: 2px;
+}
+
+.reading-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 8px;
+  padding-top: 6px;
+  border-top: 1px solid var(--border);
+}
+
+.checks {
+  list-style: none;
+  margin: 0 0 12px;
+  padding: 0;
+  font-size: 0.92rem;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.job-state {
+  font-size: 1.1rem;
+}
+
+.note-plain {
+  color: var(--text);
+}
+
+.job-actions {
+  margin-top: 14px;
+}
+
+.confirm-check {
+  margin-top: 8px;
+  font-weight: 600;
+}
+
+.confirm-check input,
+label.inline input {
+  width: 20px;
+  height: 20px;
+}
+
 /* ---- Narrow screens: menu becomes a bottom bar (spec NF-6) ---- */
 
 @media (max-width: 720px) {
+  .stop-button {
+    width: 100%;
+    margin-left: 0;
+  }
+
   .shell {
     grid-template-columns: minmax(0, 1fr);
     grid-template-rows: minmax(0, 1fr) auto;

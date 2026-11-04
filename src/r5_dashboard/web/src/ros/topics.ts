@@ -30,6 +30,11 @@ export const TOPICS = {
   recordingStatus: { name: '/r5/recording/status', type: 'r5_dashboard_interfaces/msg/RecordingStatus', throttleMs: 500 },
   /** Goes up whenever fields or the home point change, so every open dashboard reloads them. */
   fieldsRevision: { name: '/r5/fields/revision', type: 'std_msgs/msg/UInt32' },
+  /** The current spray job, from job_manager. */
+  jobStatus: { name: '/r5/job/status', type: 'r5_dashboard_interfaces/msg/JobStatus', throttleMs: 250 },
+  /** The plan of the current job. */
+  jobPlan: { name: '/r5/job/plan', type: 'r5_dashboard_interfaces/msg/CoveragePlan' },
+  odometryLocal: { name: '/odometry/local', type: 'nav_msgs/msg/Odometry', throttleMs: 500 },
 } as const satisfies Record<string, TopicSpec>;
 
 export const SERVICES = {
@@ -43,6 +48,13 @@ export const SERVICES = {
   startRecording: { name: '/r5/recording/start', type: 'std_srvs/srv/Trigger' },
   stopRecording: { name: '/r5/recording/stop', type: 'std_srvs/srv/Trigger' },
   clearRecording: { name: '/r5/recording/clear', type: 'std_srvs/srv/Trigger' },
+  jobDefaults: { name: '/r5/job/defaults', type: 'r5_dashboard_interfaces/srv/GetJobDefaults' },
+  planJob: { name: '/r5/job/plan', type: 'r5_dashboard_interfaces/srv/PlanJob' },
+  startJob: { name: '/r5/job/start', type: 'r5_dashboard_interfaces/srv/StartJob' },
+  pauseJob: { name: '/r5/job/pause', type: 'std_srvs/srv/Trigger' },
+  resumeJob: { name: '/r5/job/resume', type: 'r5_dashboard_interfaces/srv/ResumeJob' },
+  /** Software stop: ends any job, cancels navigation, zero velocity (spec NAV-4). */
+  stop: { name: '/r5/stop', type: 'std_srvs/srv/Trigger' },
   /** From rosapi, which starts with rosbridge. Used to measure round-trip time. */
   getTime: { name: '/rosapi/get_time', type: 'rosapi_msgs/srv/GetTime' },
 } as const;
@@ -244,4 +256,112 @@ export interface GetHomeResponse {
 
 export interface UInt32 {
   data: number;
+}
+
+// ---- Spray jobs ----
+
+export interface SpraySettings {
+  field_id: string;
+  application_rate_l_per_m2: number;
+  boom_width_m: number;
+  speed_kmh: number;
+  tank_capacity_l: number;
+  auto_angle: boolean;
+  /** Degrees clockwise from north. */
+  row_angle_deg: number;
+}
+
+export const SECTION_KIND = { SWATH: 0, TURN: 1 } as const;
+
+export interface PathSection {
+  kind: number;
+  points: LatLon[];
+}
+
+export interface CoveragePlan {
+  plan_id: number;
+  field_id: string;
+  field_name: string;
+  settings: SpraySettings;
+  sections: PathSection[];
+  row_angle_deg: number;
+  swath_count: number;
+  area_sprayed_m2: number;
+  spray_length_m: number;
+  path_length_m: number;
+  duration_s: number;
+  liquid_needed_l: number;
+  refills: number;
+  flow_l_min: number;
+  warnings: string[];
+}
+
+export const CHECK_LEVEL = { OK: 0, WARNING: 1, FAIL: 2 } as const;
+
+export interface Check {
+  level: number;
+  label: string;
+  detail: string;
+}
+
+export const JOB_STATE = {
+  IDLE: 0,
+  GOING_TO_START: 1,
+  SPRAYING: 2,
+  TURNING: 3,
+  PAUSED: 4,
+  RETURNING_HOME: 5,
+  WAITING_FOR_REFILL: 6,
+  RETURNING_TO_WORK: 7,
+  FINISHED: 8,
+  FAILED: 9,
+  STOPPED: 10,
+} as const;
+
+/** States while a job is under way. */
+export const JOB_ACTIVE: ReadonlySet<number> = new Set([1, 2, 3, 4, 5, 6, 7]);
+
+export interface JobStatus {
+  state: number;
+  current_action: string;
+  message: string;
+  field_id: string;
+  field_name: string;
+  plan_id: number;
+  section_index: number;
+  swaths_done: number;
+  swath_count: number;
+  progress: number;
+  area_done_m2: number;
+  liquid_used_l: number;
+  tank_remaining_l: number;
+  tank_capacity_l: number;
+  remaining_s: number;
+  sprayer_on: boolean;
+  started: RosTime;
+}
+
+export interface JobDefaultsResponse {
+  settings: SpraySettings;
+  max_speed_kmh: number;
+  pump_max_flow_l_min: number;
+  tank_reserve_fraction: number;
+}
+
+export interface PlanJobResponse {
+  success: boolean;
+  message: string;
+  plan: CoveragePlan;
+  checks: Check[];
+  ready: boolean;
+}
+
+export interface StartJobResponse {
+  success: boolean;
+  message: string;
+  checks: Check[];
+}
+
+export interface Odometry {
+  twist: { twist: { linear: Vector3; angular: Vector3 } };
 }

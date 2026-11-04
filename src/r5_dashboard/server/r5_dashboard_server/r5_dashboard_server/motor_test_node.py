@@ -22,9 +22,14 @@ from rclpy.node import Node
 from sensor_msgs.msg import JointState
 
 from r5_dashboard_interfaces.action import MotorTest
+from r5_dashboard_interfaces.msg import JobStatus
+from rclpy.qos import DurabilityPolicy, QoSProfile
 
 from .shutdown import init_without_signal_handlers
 from .motor_test import BOTH, evaluate, side_name, twist_for, wheel_speeds
+
+# JobStatus states while a job is under way (spec RB-10: no motor tests then).
+JOB_ACTIVE = {1, 2, 3, 4, 5, 6, 7}
 
 # Hard limits, whatever the parameters say.
 MAX_TEST_SPEED_MPS = 0.1
@@ -50,6 +55,14 @@ class MotorTestNode(Node):
         self.cmd_pub = self.create_publisher(TwistStamped if self.stamped else Twist, cmd_topic, 10)
         self.create_subscription(JointState, "/joint_states", self.on_joints, 10, callback_group=group)
         self.create_subscription(Odometry, "/odometry/local", self.on_odometry, 10, callback_group=group)
+        self.job_active = False
+        self.create_subscription(
+            JobStatus,
+            "/r5/job/status",
+            self.on_job,
+            QoSProfile(depth=1, durability=DurabilityPolicy.TRANSIENT_LOCAL),
+            callback_group=group,
+        )
 
         self.lock = threading.Lock()
         self.busy = False
@@ -83,6 +96,9 @@ class MotorTestNode(Node):
             )
             self.wheel_stamp = time.monotonic()
 
+    def on_job(self, msg: JobStatus) -> None:
+        self.job_active = msg.state in JOB_ACTIVE
+
     def on_odometry(self, msg: Odometry) -> None:
         self.odom_twist = (msg.twist.twist.linear.x, msg.twist.twist.angular.z)
 
@@ -111,7 +127,8 @@ class MotorTestNode(Node):
                 return self.refuse(goal_handle, "Another motor test is already running.")
             self.busy = True
         try:
-            # The job manager will also refuse while a job is running (TODO_ROBOT.md).
+            if self.job_active:
+                return self.refuse(goal_handle, "A spray job is running. Stop it before testing the motors.")
             if self.odom_twist and (
                 abs(self.odom_twist[0]) > self.moving_threshold or abs(self.odom_twist[1]) > 0.05
             ):

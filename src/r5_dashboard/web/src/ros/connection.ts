@@ -81,6 +81,9 @@ export class RobotConnection {
           clearTimeout(timer);
           reject(new Error(error));
         },
+        // rosbridge gives up on a service after its own timeout (5 s by default) unless told
+        // otherwise, in seconds. Ask it to wait as long as we do.
+        timeoutMs / 1000,
       );
     });
   }

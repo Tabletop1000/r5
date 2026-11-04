@@ -21,11 +21,12 @@ from rclpy.node import Node
 from rclpy.qos import DurabilityPolicy, QoSProfile
 from std_srvs.srv import Trigger
 
-from r5_dashboard_interfaces.msg import Alert, AlertArray, RobotStats
+from r5_dashboard_interfaces.msg import Alert, AlertArray, JobStatus, RobotStats
 from r5_dashboard_interfaces.srv import AcknowledgeAlert
 
 from .shutdown import init_without_signal_handlers
 from .stats import (
+    ERROR,
     INFO,
     WARNING,
     AlertTracker,
@@ -38,6 +39,9 @@ from .stats import (
 
 MAINTENANCE_ALERT = "robot:maintenance"
 NO_DIAGNOSTICS_ALERT = "robot:no_diagnostics"
+REFILL_ALERT = "job:refill"
+JOB_PROBLEM_ALERT = "job:problem"
+JOB_FAILED_ALERT = "job:failed"
 
 
 def to_time(seconds: float) -> Time:
@@ -70,6 +74,7 @@ class RobotStatusNode(Node):
         self.alerts_pub = self.create_publisher(AlertArray, "/r5/alerts", latched)
         self.create_subscription(Odometry, "/odometry/local", self.on_odometry, 10)
         self.create_subscription(DiagnosticArray, "/diagnostics_agg", self.on_diagnostics, 10)
+        self.create_subscription(JobStatus, "/r5/job/status", self.on_job, latched)
         self.create_service(Trigger, "/r5/stats/service_done", self.on_service_done)
         self.create_service(AcknowledgeAlert, "/r5/alerts/acknowledge", self.on_acknowledge)
         self.create_timer(1.0, self.tick)
@@ -86,6 +91,25 @@ class RobotStatusNode(Node):
         self.last_diagnostics = time.monotonic()
         entries = [DiagnosticEntry(s.name, _level(s.level), s.message) for s in msg.status]
         if self.alerts.update_diagnostics(entries, time.time()):
+            self.publish_alerts()
+
+    def on_job(self, msg: JobStatus) -> None:
+        """Spray job events that need the user (spec AS-9)."""
+        now = time.time()
+        changed = self.alerts.set_condition(
+            REFILL_ALERT,
+            msg.state == JobStatus.WAITING_FOR_REFILL,
+            WARNING,
+            "Spray job",
+            f"Tank empty — robot returned home for refill ({msg.field_name}).",
+            now,
+        )
+        paused_by_failure = msg.state == JobStatus.PAUSED and msg.message.startswith("Navigation failed")
+        changed |= self.alerts.set_condition(JOB_PROBLEM_ALERT, paused_by_failure, ERROR, "Spray job", msg.message, now)
+        changed |= self.alerts.set_condition(
+            JOB_FAILED_ALERT, msg.state == JobStatus.FAILED, ERROR, "Spray job", msg.message, now
+        )
+        if changed:
             self.publish_alerts()
 
     def on_service_done(self, _request, response):

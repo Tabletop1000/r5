@@ -5,7 +5,7 @@ import { StatusStrip } from './components/StatusStrip';
 import { PlaceholderPage } from './pages/PlaceholderPage';
 import { RobotPage } from './pages/robot/RobotPage';
 import { FieldsPage } from './pages/fields/FieldsPage';
-import { SprayPage } from './pages/SprayPage';
+import { SprayPage } from './pages/spray/SprayPage';
 import { RobotConnection, defaultRosUrl } from './ros/connection';
 import { RobotContext } from './ros/RobotContext';
 import { pageFromHash, type PageId } from './routes';

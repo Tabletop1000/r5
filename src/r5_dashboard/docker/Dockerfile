@@ -6,6 +6,9 @@ RUN apt-get update && DEBIAN_FRONTEND=noninteractive apt-get upgrade -y \
     python3-aiohttp \
     python3-cryptography \
     python3-pytest \
+    ros-jazzy-fields2cover \
+    ros-jazzy-nav2-msgs \
+    ros-jazzy-robot-localization \
     ros-jazzy-rosbridge-server \
     && rm -rf /var/lib/apt/lists/*
 RUN echo 'source /opt/ros/jazzy/setup.bash' >> /root/.bashrc

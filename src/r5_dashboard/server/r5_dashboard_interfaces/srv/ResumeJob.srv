@@ -1,0 +1,6 @@
+# Resume a paused job, or carry on after a refill.
+# tank_refilled must be true when the robot is waiting for a refill.
+bool tank_refilled
+---
+bool success
+string message

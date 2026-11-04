@@ -1,7 +1,7 @@
-import type { ReactNode } from 'react';
+import { useState, type ReactNode } from 'react';
 import { useNow } from '../hooks/useNow';
-import { useLinkState, useTopic } from '../ros/RobotContext';
-import { TOPICS, type AlertArray, type BatteryState } from '../ros/topics';
+import { useLinkState, useRobot, useTopic } from '../ros/RobotContext';
+import { JOB_ACTIVE, SERVICES, TOPICS, type AlertArray, type BatteryState, type JobStatus, type Odometry, type TriggerResponse } from '../ros/topics';
 import { batteryPercent, countAlerts, formatAge, isStale } from '../status';
 
 const NOT_AVAILABLE = 'Not available';
@@ -16,6 +16,14 @@ export function StatusStrip() {
   const battery = useTopic<BatteryState>(TOPICS.battery);
   const alertList = useTopic<AlertArray>(TOPICS.alerts);
 
+  const jobTopic = useTopic<JobStatus>(TOPICS.jobStatus);
+  const job = jobTopic.message;
+  const odom = useTopic<Odometry>(TOPICS.odometryLocal);
+  const moving =
+    odom.message !== null &&
+    !isStale(odom.receivedAt, now) &&
+    (Math.abs(odom.message.twist.twist.linear.x) > 0.03 || Math.abs(odom.message.twist.twist.angular.z) > 0.05);
+  const showStop = link.status === 'connected' && ((job !== null && JOB_ACTIVE.has(job.state)) || moving);
   const percent = batteryPercent(battery.message);
   const alerts = countAlerts(alertList.message);
   const alertTotal = alerts.errors + alerts.warnings;
@@ -38,8 +46,9 @@ export function StatusStrip() {
         {percent === null ? NOT_AVAILABLE : `${percent}%`}
       </StatusItem>
 
-      {/* The job manager that reports the current action doesn't exist yet (spec 5.2). */}
-      <StatusItem label="Action">{NOT_AVAILABLE}</StatusItem>
+      <StatusItem label="Action" tone={job && JOB_ACTIVE.has(job.state) ? 'good' : 'neutral'} stale={job !== null && isStale(jobTopic.receivedAt, now)}>
+        {job ? job.current_action || 'Idle' : NOT_AVAILABLE}
+      </StatusItem>
 
       <StatusItem
         label="Alerts"
@@ -57,7 +66,28 @@ export function StatusStrip() {
                 .filter(Boolean)
                 .join(', ')}
       </StatusItem>
+      {showStop && <StopButton />}
     </header>
+  );
+}
+
+/** Always shown while a job runs or the robot moves (spec NAV-4). No confirmation: it must be quick. */
+function StopButton() {
+  const robot = useRobot();
+  const [state, setState] = useState<'idle' | 'sending' | 'failed'>('idle');
+  async function stop() {
+    setState('sending');
+    try {
+      const resp = await robot.callService<object, TriggerResponse>(SERVICES.stop, {}, 3000);
+      setState(resp.success ? 'idle' : 'failed');
+    } catch {
+      setState('failed');
+    }
+  }
+  return (
+    <button type="button" className="stop-button" onClick={() => void stop()} disabled={state === 'sending'}>
+      {state === 'sending' ? 'Stopping…' : state === 'failed' ? 'Stop failed — try again' : 'STOP'}
+    </button>
   );
 }
 

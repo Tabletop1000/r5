@@ -1,0 +1,9 @@
+# Plan without moving (spec AS-3), and run the pre-start checks (spec AS-5).
+SpraySettings settings
+---
+bool success
+string message
+CoveragePlan plan
+Check[] checks
+# true when no check failed.
+bool ready

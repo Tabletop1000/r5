@@ -148,7 +148,7 @@ tank capacity and flow rate, and an **Upload** button.
 | Field | — | — | Dropdown of saved fields |
 | Application rate | L/m² | — | Entered to 3 decimal places, as typical rates are small (e.g. 0.020 L/m² = 200 L/ha) |
 | Boom width | m | robot config (placeholder 1.5) | Also used as the swath width for the coverage path |
-| Travel speed | km/h | robot config (placeholder 3.0) | |
+| Travel speed | km/h | robot config (1.0) | At most the robot's top speed, 1.08 km/h with Nav2's current 0.3 m/s limit. |
 | Tank capacity | L | robot config (placeholder 50) | |
 | Row direction | degrees, or Auto | Auto | **[Proposed]** Auto lets Fields2Cover pick the angle that gives the fewest turns |
 
@@ -266,6 +266,9 @@ the `r5` workspace yet.
 - **RI-1** Coverage paths are planned with Fields2Cover (F2C). How F2C is brought in (Nav2's
   `opennav_coverage` server, a source build, or calling the F2C library directly) is decided during
   implementation. The job manager below hides that choice, so the dashboard is not affected by it.
+  *Decided in step 4:* the job manager calls F2C's Python bindings from the `ros-jazzy-fields2cover`
+  apt package (`opennav_coverage` has no Jazzy release), and drives the result with Nav2's
+  `FollowPath` and `NavigateToPose`.
 - **RI-2** The dashboard does not call the coverage server directly. It calls a robot-side
   **job manager** (*new*, part of `r5_dashboard_server`), which:
   1. loads the field from storage by `id`;

@@ -74,7 +74,8 @@ dependencies.
 | `rosbridge_port` | `9090` | Bound to 127.0.0.1 only |
 | `data_dir` | `~/.r5` | Password hash, sessions, TLS certificate, usage counters |
 | `use_sim_time` | `false` | Set `true` with the Gazebo simulation |
-| `record_fix_requirement` | `rtk_fixed` | Worst GPS fix accepted when recording a boundary: `rtk_fixed`, `rtk_float` or `any`. Use `any` with the simulator or the development M9N receiver. |
+| `fix_requirement` | `rtk_fixed` | Worst GPS fix accepted for recording a boundary and for running a spray job: `rtk_fixed`, `rtk_float` or `any`. Use `any` with the simulator or the development M9N receiver. |
+| `sprayer_stub` | `false` | Start `sprayer_stub`, which logs sprayer commands. Use `true` until the sprayer exists. |
 
 ### What the launch file starts
 
@@ -84,6 +85,8 @@ dependencies.
 | `server` | HTTPS, login, web app, WebSocket proxy |
 | `robot_status` | Operating hours, distance, service schedule (`/r5/stats`); active alerts from `/diagnostics_agg` and its own checks (`/r5/alerts`); services to record a service and acknowledge an alert |
 | `motor_test` | `/r5/motor_test` action: drives one side or both slowly for 2 s and checks the wheel speeds. Speed and time are fixed on the robot. |
+| `job_manager` | Plans area spray jobs with Fields2Cover and runs them with Nav2: `FollowPath` for rows and turns, `NavigateToPose` to the start and home. Switches the sprayer by position along each row, estimates the tank, drives home to refill, and handles pause, resume and the software stop (`/r5/stop`). Its parameters (boom width, tank, pump, speeds, turn radius, Nav2 goal tolerance, checks) are listed at the top of `job_manager_node.py`. |
+| `sprayer_stub` | Optional stand-in for the sprayer: logs `/r5/sprayer/enable` and `/r5/sprayer/flow_setpoint` |
 | `field_manager` | Stores fields and the home point; records a boundary from `/fix` while the robot is driven. Recording can also be started and stopped by holding controller button 3 (Y on an Xbox controller) for a second (`joy_record_button`, `joy_hold_s` parameters). |
 
 ### Files in the data directory
@@ -95,6 +98,7 @@ dependencies.
 | `tls/cert.pem`, `tls/key.pem` | Self-signed certificate, made on first start. Delete both to make a new one. |
 | `stats.json` | Operating time, distance, last service. Saved every minute and on shutdown. |
 | `service_log.json` | Every service recorded with "Service done" |
+| `job_settings.json` | Last-used spray settings for each field |
 | `fields/<id>.geojson` | One file per field: boundary, keep-out zones and settings. Opens directly in QGIS. |
 | `home.geojson` | The home point |
 | `map.json` | Optional: map tile sources (see below) |
@@ -123,6 +127,13 @@ Build the image once:
 docker build -t r5-dashboard-dev docker
 ```
 
+Create the data folder first. If Docker creates it, it belongs to root and the dashboard can't
+save anything there:
+
+```bash
+mkdir -p ~/.r5-dev
+```
+
 Start the simulation in the `r5-laptop` container as usual (see the `r5` repository's
 `doc/development.md`; `headless:=true` works). Then, in a second terminal:
 
@@ -139,7 +150,7 @@ docker run -it --rm --net=host --ipc=host \
 colcon --log-base /tmp/log build --base-paths server --build-base /tmp/build --install-base /tmp/install
 source /tmp/install/setup.bash
 ros2 run r5_dashboard_server set_password --data-dir /data   # first time only
-ros2 launch r5_dashboard_server dashboard.launch.py data_dir:=/data use_sim_time:=true record_fix_requirement:=any
+ros2 launch r5_dashboard_server dashboard.launch.py data_dir:=/data use_sim_time:=true fix_requirement:=any sprayer_stub:=true
 ```
 
 | Option | Purpose |
@@ -193,5 +204,7 @@ robot yet show "Not available"; [TODO_ROBOT.md](TODO_ROBOT.md) lists them.
 | Wheels | `/joint_states` | joint_state_broadcaster |
 | Motor test | `/r5/motor_test` | `motor_test` |
 | Fields, home | `/r5/fields/*`, `/r5/home/*` services, `/r5/fields/revision` | `field_manager` |
+| Spray jobs | `/r5/job/defaults`, `plan`, `start`, `pause`, `resume` services; `/r5/job/status`, `/r5/job/plan` topics; `/r5/stop` | `job_manager` (uses Nav2 `/follow_path`, `/navigate_to_pose`, `/speed_limit` and robot_localization `/fromLL`) |
+| Sprayer | `/r5/sprayer/enable`, `/r5/sprayer/flow_setpoint` | Published by `job_manager`; placeholder until the sprayer exists |
 | Boundary recording | `/r5/recording/start`, `stop`, `clear`, `/r5/recording/status` | `field_manager` (reads `/fix`, `/navpvt`, `/joy`) |
-| Current action | — | Job manager, not built yet |
+| Current action, STOP | `/r5/job/status`, `/r5/stop`, `/odometry/local` | `job_manager` |

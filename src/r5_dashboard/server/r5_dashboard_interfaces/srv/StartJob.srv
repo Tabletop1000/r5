@@ -1,0 +1,7 @@
+SpraySettings settings
+# The user confirmed the tank is full (spec AS-9: there is no tank sensor yet).
+bool tank_full_confirmed
+---
+bool success
+string message
+Check[] checks

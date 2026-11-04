@@ -25,7 +25,7 @@ from std_msgs.msg import UInt32
 from std_srvs.srv import Trigger
 
 from r5_dashboard_interfaces.msg import Field as FieldMsg
-from r5_dashboard_interfaces.msg import GeoPolygon, LatLon, RecordingStatus
+from r5_dashboard_interfaces.msg import GeoPolygon, JobStatus, LatLon, RecordingStatus
 from r5_dashboard_interfaces.srv import DeleteField, GetHome, ListFields, SaveField, SetHome
 
 from .fields import (
@@ -45,6 +45,8 @@ except ImportError:  # pragma: no cover
     NavPVT = None
 
 NAVPVT_FRESH_S = 2.0
+# JobStatus states while a job is under way.
+JOB_ACTIVE = {1, 2, 3, 4, 5, 6, 7}
 
 
 def to_time(seconds: float) -> Time:
@@ -126,6 +128,8 @@ class FieldManagerNode(Node):
             self.create_subscription(NavPVT, "/navpvt", self.on_navpvt, qos_profile_sensor_data)
         if self.joy_button >= 0:
             self.create_subscription(Joy, "/joy", self.on_joy, 10)
+        self.job_field: str | None = None  # field of the job under way, if any
+        self.create_subscription(JobStatus, "/r5/job/status", self.on_job, latched)
 
         self.create_timer(1.0, self.publish_status)
         self.publish_status()
@@ -137,6 +141,9 @@ class FieldManagerNode(Node):
             f"Fields in {self.store.dir}. Recording needs {FIX_NAMES[self.recorder.min_quality]} or better"
             + (f"; hold controller button {self.joy_button} to start/stop." if self.joy_button >= 0 else ".")
         )
+
+    def on_job(self, msg: JobStatus) -> None:
+        self.job_field = msg.field_id if msg.state in JOB_ACTIVE else None
 
     # ---- Fields ----
 
@@ -161,7 +168,9 @@ class FieldManagerNode(Node):
         return response
 
     def on_delete(self, request, response):
-        # Once the job manager exists it must refuse while a job uses this field (spec FM-7).
+        if self.job_field == request.id:
+            response.success, response.message = False, "A spray job is using this field. Stop it first."
+            return response
         try:
             deleted = self.store.delete(request.id)
         except FieldInvalid as exc:
@@ -198,7 +207,9 @@ class FieldManagerNode(Node):
     # ---- Recording ----
 
     def on_start(self, _request, response):
-        if self.recorder.state == RECORDING:
+        if self.job_field is not None:
+            response.success, response.message = False, "A spray job is running."
+        elif self.recorder.state == RECORDING:
             response.success, response.message = False, "Already recording."
         else:
             self.recorder.start()
@@ -245,7 +256,9 @@ class FieldManagerNode(Node):
             self.joy_pressed_at = now
         if not self.joy_handled and now - self.joy_pressed_at >= self.joy_hold_s:
             self.joy_handled = True  # once per press
-            if self.recorder.state == RECORDING:
+            if self.job_field is not None and self.recorder.state != RECORDING:
+                self.get_logger().info("Controller record button ignored: a spray job is running")
+            elif self.recorder.state == RECORDING:
                 self.recorder.stop()
                 self.get_logger().info(f"Recording stopped from the controller: {self.recorder.message}")
             else:
