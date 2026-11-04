@@ -29,7 +29,12 @@ def generate_launch_description():
             "headless",
             default_value="false",
             description="Run Gazebo without its window.",
-        )
+        ),
+        DeclareLaunchArgument(
+            "joystick",
+            default_value="false",
+            description="Start the Xbox controller nodes, for a controller plugged into the laptop.",
+        ),
     ]
 
     world = PathJoinSubstitution([FindPackageShare("r5_simulation"), "worlds", "flat.sdf"])
@@ -119,7 +124,8 @@ def generate_launch_description():
         )
     )
 
-    # The robot's own launch files, unchanged except for simulated time.
+    # The robot's own launch files, unchanged except for simulated time. Gazebo replaces
+    # diffbot.launch.py and the sensor drivers, and the dashboard runs separately.
     robot_stack = GroupAction(
         [
             SetParameter(name="use_sim_time", value=True),
@@ -135,6 +141,21 @@ def generate_launch_description():
                 PythonLaunchDescriptionSource(
                     PathJoinSubstitution(
                         [FindPackageShare("r5_navigation"), "launch", "navigation.launch.py"]
+                    )
+                )
+            ),
+            IncludeLaunchDescription(
+                PythonLaunchDescriptionSource(
+                    PathJoinSubstitution(
+                        [FindPackageShare("r5_bringup"), "launch", "command.launch.py"]
+                    )
+                ),
+                launch_arguments={"joystick": LaunchConfiguration("joystick")}.items(),
+            ),
+            IncludeLaunchDescription(
+                PythonLaunchDescriptionSource(
+                    PathJoinSubstitution(
+                        [FindPackageShare("r5_bringup"), "launch", "monitor.launch.py"]
                     )
                 )
             ),

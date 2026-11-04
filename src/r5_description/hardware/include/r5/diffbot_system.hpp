@@ -15,10 +15,13 @@
 #ifndef R5_HPP_
 #define R5_HPP_
 
+#include <atomic>
+#include <cstdint>
 #include <memory>
 #include <string>
 #include <vector>
 
+#include "diagnostic_msgs/msg/diagnostic_array.hpp"
 #include "hardware_interface/handle.hpp"
 #include "hardware_interface/hardware_info.hpp"
 #include "hardware_interface/system_interface.hpp"
@@ -26,7 +29,9 @@
 #include "rclcpp/clock.hpp"
 #include "rclcpp/duration.hpp"
 #include "rclcpp/macros.hpp"
+#include "rclcpp/publisher.hpp"
 #include "rclcpp/time.hpp"
+#include "rclcpp/timer.hpp"
 #include "rclcpp_lifecycle/node_interfaces/lifecycle_node_interface.hpp"
 #include "rclcpp_lifecycle/state.hpp"
 #include "../../serial_device.hpp"
@@ -60,10 +65,24 @@ public:
     const rclcpp::Time & time, const rclcpp::Duration & period) override;
 
 private:
+  // Written by the control loop and read by the diagnostics timer, so every field is atomic.
+  struct LinkStats
+  {
+    std::atomic<int64_t> last_data_ns{0};  // steady clock; 0 until the first valid line
+    std::atomic<uint64_t> lines_received{0};
+    std::atomic<uint64_t> write_failures{0};
+  };
+
   void stop_motors();
+  void publish_diagnostics();
 
   SerialDevice motors_front_;
   SerialDevice motors_rear_;
+  LinkStats front_link_;
+  LinkStats rear_link_;
+
+  rclcpp::Publisher<diagnostic_msgs::msg::DiagnosticArray>::SharedPtr diagnostics_pub_;
+  rclcpp::TimerBase::SharedPtr diagnostics_timer_;
 };
 
 }  // namespace r5

@@ -6,6 +6,7 @@ Publishes  /r5/job/status (JobStatus, latched, on change and 1 Hz)
            /r5/job/plan   (CoveragePlan of the current job, latched)
            /r5/sprayer/enable (std_msgs/Bool), /r5/sprayer/flow_setpoint (std_msgs/Float32, L/min)
            /speed_limit (nav2_msgs/SpeedLimit) while a job runs
+           /mux/stop (TwistStamped zeros): twist_mux's top-priority input, held for 2 s on Stop
 Uses       Nav2 /follow_path and /navigate_to_pose; robot_localization /fromLL
 Reads      /fix, /navpvt (optional), /odometry/global, /odometry/local, /battery_state, /r5/alerts
 
@@ -97,6 +98,10 @@ def check(level: int, label: str, detail: str) -> Check:
     return Check(level=level, label=label, detail=detail)
 
 
+# How long Stop holds zero velocity on twist_mux, so nothing else can move the robot meanwhile.
+STOP_HOLD_S = 2.0
+
+
 class JobManagerNode(Node):
     def __init__(self):
         super().__init__("job_manager")
@@ -136,7 +141,7 @@ class JobManagerNode(Node):
         self.spray_pub = self.create_publisher(Bool, "/r5/sprayer/enable", latched)
         self.flow_pub = self.create_publisher(Float32, "/r5/sprayer/flow_setpoint", 10)
         self.speed_pub = self.create_publisher(SpeedLimit, "/speed_limit", 10)
-        self.cmd_pub = self.create_publisher(TwistStamped, "/cmd_vel", 10)
+        self.cmd_pub = self.create_publisher(TwistStamped, str(p("stop_cmd_vel_topic", "/mux/stop")), 10)
 
         self.follow = ActionClient(self, FollowPath, follow_name, callback_group=group)
         self.navigate = ActionClient(self, NavigateToPose, navigate_name, callback_group=group)
@@ -182,7 +187,9 @@ class JobManagerNode(Node):
         self.resume_refilled = False
         self.active_goal = None
         self.sprayer_on = False
+        self.stop_hold_until = 0.0
         self.create_timer(1.0, self.publish_status, callback_group=group)
+        self.create_timer(0.1, self.hold_stop, callback_group=group)
         self.publish_status()
         self.publish_sprayer(False, 0.0)
         self.get_logger().info(
@@ -432,8 +439,9 @@ class JobManagerNode(Node):
             if client.service_is_ready():
                 client.call_async(CancelGoal.Request())
         self.publish_sprayer(False, 0.0)
-        for _ in range(5):
-            self.publish_zero_velocity()
+        # Holding the top-priority input overrides every other command, even the controller's.
+        self.stop_hold_until = time.monotonic() + STOP_HOLD_S
+        self.publish_zero_velocity()
         self.get_logger().warning("Stop requested from the dashboard")
         if not job_running:  # a running job reports its own stop, with how much was sprayed
             self.set_status(current_action="Stopped", message="Stopped from the dashboard.")
@@ -441,6 +449,10 @@ class JobManagerNode(Node):
         return response
 
     # ---- Low-level helpers ----
+
+    def hold_stop(self) -> None:
+        if time.monotonic() < self.stop_hold_until:
+            self.publish_zero_velocity()
 
     def publish_zero_velocity(self) -> None:
         msg = TwistStamped()

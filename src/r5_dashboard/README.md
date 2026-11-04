@@ -36,33 +36,52 @@ dependencies.
 
 ## Install on the robot
 
-1. Build the web app first (above). `colcon build` copies `web/dist` into the package, so rebuild
-   the package whenever the web app changes.
-2. Put this repository inside the robot's workspace, for example by linking it into `src`:
+The dashboard is part of the `r5` repository, so the robot gets it with `git pull`, and its
+dependencies with the usual `rosdep` command (see the `r5` repository's `doc/development.md`).
+`r5_bringup/r5.launch.py` starts it. These steps are needed once, or when the web app changes:
+
+1. Build the web app on the laptop and copy it to the robot, which has no Node.js 22. From this
+   folder:
 
    ```bash
-   ln -s ~/git/r5_dashboard ~/git/r5/src/r5_dashboard
-   cd ~/git/r5
-   rosdep install --from-paths src --ignore-src -r -y --skip-keys "ros_gz_sim ros_gz_bridge gz_ros2_control"
-   colcon build --packages-select r5_dashboard_interfaces r5_dashboard_server
-   source install/setup.bash
+   scripts/deploy_web.sh jdutra@r4
    ```
 
-   Link the whole repository, not just the package folder, so the package can find `web/dist`.
+   Then rebuild the package on the robot, because `colcon build` copies `web/dist` into it:
 
-3. Set the dashboard password (at least 8 characters). This also logs out every device:
+   ```bash
+   cd ~/git/r5
+   colcon build --packages-select r5_dashboard_server
+   ```
+
+2. Set the dashboard password (at least 8 characters). This also logs out every device:
 
    ```bash
    ros2 run r5_dashboard_server set_password
    ```
 
-4. Start rosbridge, the server and the dashboard's robot-side nodes:
+3. If the robot's firewall is on (`sudo ufw status`), open the dashboard ports. Keep 9090
+   (rosbridge) closed; it only listens on localhost anyway:
 
    ```bash
-   ros2 launch r5_dashboard_server dashboard.launch.py
+   sudo ufw allow 8443/tcp
+   sudo ufw allow 8080/tcp
    ```
 
-5. Browse to `https://<robot>:8443`. The browser warns about the certificate the first time;
+4. Check the robot's clock is set at boot, because alert times and session expiry use it:
+   `timedatectl` should show `System clock synchronized: yes`. The Raspberry Pi has no battery-backed
+   clock, so without internet it starts at the last shutdown time. A DS3231 clock module fixes that.
+
+5. Back up the data directory now and then, from the laptop:
+
+   ```bash
+   rsync -a jdutra@r4:.r5/ ~/r5-backup/
+   ```
+
+6. Start the robot with `ros2 launch r5_bringup r5.launch.py`, or run the dashboard alone with
+   `ros2 launch r5_dashboard_server dashboard.launch.py`.
+
+7. Browse to `https://<robot>:8443`. The browser warns about the certificate the first time;
    accept it once. `http://<robot>:8080` redirects there.
 
 ### Launch arguments
@@ -85,7 +104,7 @@ dependencies.
 | `server` | HTTPS, login, web app, WebSocket proxy |
 | `robot_status` | Operating hours, distance, service schedule (`/r5/stats`); active alerts from `/diagnostics_agg` and its own checks (`/r5/alerts`); services to record a service and acknowledge an alert |
 | `motor_test` | `/r5/motor_test` action: drives one side or both slowly for 2 s and checks the wheel speeds. Speed and time are fixed on the robot. |
-| `job_manager` | Plans area spray jobs with Fields2Cover and runs them with Nav2: `FollowPath` for rows and turns, `NavigateToPose` to the start and home. Switches the sprayer by position along each row, estimates the tank, drives home to refill, and handles pause, resume and the software stop (`/r5/stop`). Its parameters (boom width, tank, pump, speeds, turn radius, Nav2 goal tolerance, checks) are listed at the top of `job_manager_node.py`. |
+| `job_manager` | Plans area spray jobs with Fields2Cover and runs them with Nav2: `FollowPath` for rows and turns, `NavigateToPose` to the start and home. Switches the sprayer by position along each row, estimates the tank, drives home to refill, and handles pause, resume and the software stop (`/r5/stop`), which holds zero velocity on `twist_mux`'s top-priority input for 2 s. Its parameters (boom width, tank, pump, speeds, turn radius, Nav2 goal tolerance, checks) are listed at the top of `job_manager_node.py`. |
 | `sprayer_stub` | Optional stand-in for the sprayer: logs `/r5/sprayer/enable` and `/r5/sprayer/flow_setpoint` |
 | `field_manager` | Stores fields and the home point; records a boundary from `/fix` while the robot is driven. Recording can also be started and stopped by holding controller button 3 (Y on an Xbox controller) for a second (`joy_record_button`, `joy_hold_s` parameters). |
 
@@ -153,13 +172,14 @@ mkdir -p ~/.r5-dev
 ```
 
 Start the simulation in the `r5-laptop` container as usual (see the `r5` repository's
-`doc/development.md`; `headless:=true` works). Then, in a second terminal:
+`doc/development.md`; `headless:=true` works), on the simulation's `ROS_DOMAIN_ID` of 42, so it
+can't reach the real robot. Then, in a second terminal:
 
 ```bash
 docker run -it --rm --net=host --ipc=host \
   --user $(id -u):$(id -g) -e HOME=/tmp \
-  -e FASTDDS_BUILTIN_TRANSPORTS=UDPv4 \
-  -v ~/r5_ws/r5_dashboard:/home/jdutra/r5_ws/r5_dashboard \
+  -e FASTDDS_BUILTIN_TRANSPORTS=UDPv4 -e ROS_DOMAIN_ID=42 \
+  -v ~/r5_ws/r5/src/r5_dashboard:/home/jdutra/r5_ws/r5_dashboard \
   -v ~/.r5-dev:/data \
   --security-opt label=disable \
   r5-dashboard-dev bash
@@ -192,17 +212,19 @@ Set `R5_DASHBOARD_SERVER` to point Vite at another server, for example the real 
 
 ```bash
 docker run --rm -e PYTHONDONTWRITEBYTECODE=1 --user $(id -u):$(id -g) \
-  -v ~/r5_ws/r5_dashboard:/w --security-opt label=disable r5-dashboard-dev \
+  -v ~/r5_ws/r5/src/r5_dashboard:/w --security-opt label=disable r5-dashboard-dev \
   bash -c "cd /w/server/r5_dashboard_server && python3 -m pytest -p no:cacheprovider test"
 ```
 
 ### Launching the robot sim
 ```bash
-docker run -it --rm --net=host --ipc=host -v ~/r5_ws/r5:/home/jdutra/git/r5 --security-opt label=disable r5-laptop bash
+docker run -it --rm --net=host --ipc=host -e ROS_DOMAIN_ID=42 -v ~/r5_ws/r5:/home/jdutra/git/r5 --security-opt label=disable r5-laptop bash
 # inside:
 source install/setup.bash
 ros2 launch r5_simulation simulation.launch.py headless:=true
 ```
+
+The simulation includes `twist_mux`, so the motor test and Stop work as on the robot.
 
 ## ROS interfaces the dashboard uses
 
@@ -214,9 +236,9 @@ robot yet show "Not available"; [TODO_ROBOT.md](TODO_ROBOT.md) lists them.
 | Usage, service schedule | `/r5/stats` | `robot_status` |
 | Alerts (strip and Robot page) | `/r5/alerts`, `/r5/alerts/acknowledge` | `robot_status`, which reads `/diagnostics_agg` |
 | Battery | `/battery_state` | Not published yet |
-| WiFi signal | `/r5/wifi_signal_dbm` | Not published yet |
+| WiFi signal | `/r5/wifi_signal_dbm` | `r5_monitor` |
 | Round trip | `/rosapi/get_time` | rosapi |
-| Versions | `/r5/versions` | Not published yet |
+| Versions | `/r5/versions` | `r5_monitor` (`r5` and ROS; motor node firmware not yet) |
 | GPS | `/fix`, `/navpvt` | u-blox driver (`/navpvt` only on the real receiver) |
 | IMU | `/bno055/imu`, `/bno055/calib_status`, `/bno055/temp` | BNO055 driver (the simulator has only `imu`) |
 | Wheels | `/joint_states` | joint_state_broadcaster |

@@ -12,8 +12,10 @@ doesn't need installing on the host.
 | `src/r5_sensors` | Config and launch files for the BNO055 IMU and u-blox GPS |
 | `src/r5_localisation` | Dual EKF localisation. See its [README](../src/r5_localisation/README.md). |
 | `src/r5_navigation` | Nav2 configuration and launch files |
+| `src/r5_monitor` | Computer temperature, WiFi signal and versions, for the dashboard |
+| `src/r5_dashboard` | The operator dashboard: web app, server and its ROS nodes. See its [README](../src/r5_dashboard/README.md). |
 | `src/r5_simulation` | Gazebo world and launch file, for the laptop only |
-| `src/r5_bringup` | `r5.launch.py`, which starts everything on the robot |
+| `src/r5_bringup` | `r5.launch.py`, which starts everything on the robot, plus the velocity command switch, Xbox controller and diagnostics |
 | `docker/` | The laptop development image |
 
 The motor node firmware is a separate ESP-IDF project, kept outside this repository in
@@ -207,6 +209,18 @@ ls -l /dev/ttyMotornode*
 Those device names come from udev rules on the robot, in
 `/etc/udev/rules.d/90-motornodes.rules`.
 
+`r5.launch.py` also starts the dashboard. Its arguments:
+
+| Argument | Default | |
+| --- | --- | --- |
+| `dashboard` | `true` | Start the dashboard server and its nodes |
+| `joystick` | `true` | Start the Xbox controller nodes |
+| `fix_requirement` | `any` | Worst GPS fix the dashboard accepts. Change to `rtk_fixed` once the ZED-F9 is fitted. |
+| `sprayer_stub` | `true` | Log sprayer commands, until the sprayer exists |
+
+The dashboard needs some one-off setup on the robot, covered in its
+[README](../src/r5_dashboard/README.md#install-on-the-robot): the web app, a password and the firewall.
+
 To read a motor node directly, stop the launch first, because only one program can use the port:
 
 ```bash
@@ -227,6 +241,50 @@ The camera follows `base_footprint`, so the robot stays in view and the grid mov
 frame is `odom`, which works without GPS. To see the GPS-corrected position instead, set
 **Global Options > Fixed Frame** to `map`.
 
+## Velocity commands
+
+Everything that moves the robot sends its commands to `twist_mux`, which passes the highest
+priority recent one to `/cmd_vel`. Inputs that stop for 0.5 s are ignored. Don't publish to
+`/cmd_vel` directly, because it would fight `twist_mux`.
+
+| Input | Priority | Sent by |
+| --- | --- | --- |
+| `/mux/stop` | 255 | The dashboard's Stop button, held for 2 s |
+| `/mux/joy` | 100 | Xbox controller, while LB is held |
+| `/mux/keyboard` | 90 | `teleop_twist_keyboard` |
+| `/mux/test` | 50 | The dashboard's motor test |
+| `/mux/nav` | 10 | Nav2 |
+
+The priorities are in `src/r5_bringup/config/twist_mux.yaml`.
+
+## Driving with the Xbox controller
+
+Connect the controller to the robot, not the laptop, with its USB dongle or over Bluetooth. Hold
+**LB** and use the left stick for forward and back and the right stick to turn. Hold **RB** as well
+for full speed. Releasing LB stops the robot. Holding **Y** for 1 s starts or stops a boundary
+recording on the dashboard.
+
+To pair over Bluetooth, put the controller in pairing mode, then on the robot:
+
+```bash
+bluetoothctl
+# inside bluetoothctl:
+scan on
+pair <controller address>
+trust <controller address>
+connect <controller address>
+```
+
+The robot's user must be able to read the controller, so add it to the `input` group once and log
+in again:
+
+```bash
+sudo usermod -aG input $USER
+```
+
+Check it's seen with `ros2 topic echo /joy` while moving a stick. The button numbers are in
+`src/r5_bringup/config/joystick.yaml`.
+
 ## Driving with teleop
 
 The controller only accepts `TwistStamped`, so teleop needs these flags. Without them the robot
@@ -234,11 +292,11 @@ ignores commands and shows no error:
 
 ```bash
 ros2 run teleop_twist_keyboard teleop_twist_keyboard \
-  --ros-args -p stamped:=true -p frame_id:=base_footprint
+  --ros-args -p stamped:=true -p frame_id:=base_footprint -r cmd_vel:=/mux/keyboard
 ```
 
-Hold a key down to keep moving, because the controller stops after 0.5 s without a command. If you
-run teleop from the laptop, the two clocks must agree to within that 0.5 s, or commands are rejected.
+Hold a key down to keep moving, because `twist_mux` stops passing commands after 0.5 s. If you run
+teleop from the laptop, the two clocks must agree to within that 0.5 s, or commands are rejected.
 
 Keep the wheels off the ground for the first run after any change to the hardware interface.
 
@@ -280,6 +338,8 @@ rviz2 -d install/r5/share/r5/rviz/r5.rviz --ros-args -p use_sim_time:=true
 ```
 
 To drive with teleop, add `-p use_sim_time:=true` to the teleop flags above, or commands are rejected.
+For an Xbox controller plugged into the laptop, start the simulation with `joystick:=true`, and run
+the container with `--device /dev/input` so it can see the controller.
 
 The simulation doesn't model everything:
 

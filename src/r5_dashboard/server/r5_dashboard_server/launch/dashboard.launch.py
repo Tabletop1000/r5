@@ -72,12 +72,13 @@ def generate_launch_description():
         parameters=[{"data_dir": data_dir}],
     )
 
-    # Wheel geometry and joint names match r5's diffbot_controllers.yaml.
+    # Wheel geometry and joint names match r5's diffbot_controllers.yaml. Commands go through
+    # twist_mux (r5_bringup/config/twist_mux.yaml).
     motor_test = Node(
         package="r5_dashboard_server",
         executable="motor_test",
         output="both",
-        parameters=[{"use_sim_time": use_sim_time}],
+        parameters=[{"use_sim_time": use_sim_time, "cmd_vel_topic": "/mux/test"}],
     )
 
     field_manager = Node(

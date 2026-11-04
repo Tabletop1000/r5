@@ -3,16 +3,22 @@
 <package format="3">
   <name>r5_bringup</name>
   <version>0.0.0</version>
-  <description>TODO: Package description</description>
+  <description>Starts everything on the R5 robot.</description>
   <maintainer email="jadondutra@gmail.com">jdutra</maintainer>
   <license>TODO: License declaration</license>
 
   <buildtool_depend>ament_cmake</buildtool_depend>
 
+  <exec_depend>diagnostic_aggregator</exec_depend>
+  <exec_depend>joy</exec_depend>
   <exec_depend>r5</exec_depend>
+  <exec_depend>r5_dashboard_server</exec_depend>
   <exec_depend>r5_localisation</exec_depend>
+  <exec_depend>r5_monitor</exec_depend>
   <exec_depend>r5_navigation</exec_depend>
   <exec_depend>r5_sensors</exec_depend>
+  <exec_depend>teleop_twist_joy</exec_depend>
+  <exec_depend>twist_mux</exec_depend>
 
   <test_depend>ament_lint_auto</test_depend>
   <test_depend>ament_lint_common</test_depend>

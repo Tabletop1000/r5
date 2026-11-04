@@ -17,11 +17,13 @@ RUN apt-get update && DEBIAN_FRONTEND=noninteractive apt-get upgrade -y \
     ros-jazzy-ament-cmake-ros \
     ros-jazzy-backward-ros \
     ros-jazzy-controller-manager \
+    ros-jazzy-diagnostic-aggregator \
     ros-jazzy-diff-drive-controller \
     ros-jazzy-gz-ros2-control \
     ros-jazzy-hardware-interface \
     ros-jazzy-joint-state-broadcaster \
     ros-jazzy-joint-state-publisher-gui \
+    ros-jazzy-joy \
     ros-jazzy-launch-testing-ament-cmake \
     ros-jazzy-nav2-bt-navigator \
     ros-jazzy-nav2-controller \
@@ -37,7 +39,9 @@ RUN apt-get update && DEBIAN_FRONTEND=noninteractive apt-get upgrade -y \
     ros-jazzy-robot-localization \
     ros-jazzy-ros-gz-bridge \
     ros-jazzy-ros-gz-sim \
+    ros-jazzy-teleop-twist-joy \
     ros-jazzy-teleop-twist-keyboard \
+    ros-jazzy-twist-mux \
     ros-jazzy-xacro \
     && rm -rf /var/lib/apt/lists/*
 RUN echo 'source /opt/ros/jazzy/setup.bash' >> /root/.bashrc

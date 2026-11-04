@@ -29,6 +29,21 @@
 
 namespace r5
 {
+
+namespace
+{
+constexpr char FRONT_PORT[] = "/dev/ttyMotornodeFront";
+constexpr char REAR_PORT[] = "/dev/ttyMotornodeRear";
+
+// The motor nodes send 20 lines a second, so a gap longer than this means the link is down.
+constexpr double LINK_TIMEOUT_S = 0.5;
+
+int64_t steady_now_ns()
+{
+  return std::chrono::duration_cast<std::chrono::nanoseconds>(
+    std::chrono::steady_clock::now().time_since_epoch()).count();
+}
+}  // namespace
 hardware_interface::CallbackReturn DiffBotSystemHardware::on_init(
   const hardware_interface::HardwareComponentInterfaceParams & params)
 {
@@ -92,12 +107,12 @@ hardware_interface::CallbackReturn DiffBotSystemHardware::on_init(
 hardware_interface::CallbackReturn DiffBotSystemHardware::on_configure(
   const rclcpp_lifecycle::State & /*previous_state*/)
 {
-  if (!motors_front_.init("/dev/ttyMotornodeFront", B115200))
+  if (!motors_front_.init(FRONT_PORT, B115200))
   {
     RCLCPP_FATAL(get_logger(), "Failed to open front motor node.");
     return hardware_interface::CallbackReturn::ERROR;
   }
-  if (!motors_rear_.init("/dev/ttyMotornodeRear", B115200))
+  if (!motors_rear_.init(REAR_PORT, B115200))
   {
     RCLCPP_FATAL(get_logger(), "Failed to open rear motor node.");
     return hardware_interface::CallbackReturn::ERROR;
@@ -111,6 +126,20 @@ hardware_interface::CallbackReturn DiffBotSystemHardware::on_configure(
   {
     set_command(name, 0.0);
   }
+
+  // Motor link health for /diagnostics. The controller manager spins this component's node.
+  if (auto node = get_node())
+  {
+    diagnostics_pub_ = node->create_publisher<diagnostic_msgs::msg::DiagnosticArray>(
+      "/diagnostics", rclcpp::SystemDefaultsQoS());
+    diagnostics_timer_ = node->create_wall_timer(
+      std::chrono::seconds(1), [this]() { publish_diagnostics(); });
+  }
+  else
+  {
+    RCLCPP_WARN(get_logger(), "No component node, so motor link diagnostics are off.");
+  }
+
   RCLCPP_INFO(get_logger(), "Successfully configured!");
 
   return hardware_interface::CallbackReturn::SUCCESS;
@@ -150,6 +179,54 @@ hardware_interface::CallbackReturn DiffBotSystemHardware::on_shutdown(
   return hardware_interface::CallbackReturn::SUCCESS;
 }
 
+void DiffBotSystemHardware::publish_diagnostics()
+{
+  diagnostic_msgs::msg::DiagnosticArray array;
+  array.header.stamp = get_clock()->now();
+  const int64_t now_ns = steady_now_ns();
+
+  const std::pair<const char *, const LinkStats *> links[] = {
+    {FRONT_PORT, &front_link_}, {REAR_PORT, &rear_link_}};
+  for (const auto & [port, link] : links)
+  {
+    diagnostic_msgs::msg::DiagnosticStatus status;
+    const bool front = link == &front_link_;
+    status.name = front ? "r5: Motor node front" : "r5: Motor node rear";
+    status.hardware_id = port;
+
+    const int64_t last_ns = link->last_data_ns.load();
+    const double age_s = last_ns == 0 ? -1.0 : static_cast<double>(now_ns - last_ns) * 1e-9;
+    if (last_ns == 0)
+    {
+      status.level = diagnostic_msgs::msg::DiagnosticStatus::ERROR;
+      status.message = "No data received";
+    }
+    else if (age_s > LINK_TIMEOUT_S)
+    {
+      status.level = diagnostic_msgs::msg::DiagnosticStatus::ERROR;
+      status.message = "No data for " + std::to_string(static_cast<int>(age_s)) + " s";
+    }
+    else
+    {
+      status.level = diagnostic_msgs::msg::DiagnosticStatus::OK;
+      status.message = "Link up";
+    }
+
+    auto value = [&status](const std::string & key, const std::string & v) {
+      diagnostic_msgs::msg::KeyValue kv;
+      kv.key = key;
+      kv.value = v;
+      status.values.push_back(kv);
+    };
+    value("Port", port);
+    value("Seconds since last data", last_ns == 0 ? "never" : std::to_string(age_s));
+    value("Lines received", std::to_string(link->lines_received.load()));
+    value("Write failures", std::to_string(link->write_failures.load()));
+    array.status.push_back(status);
+  }
+  diagnostics_pub_->publish(array);
+}
+
 void DiffBotSystemHardware::stop_motors()
 {
   const bool front_stopped = motors_front_.writeData(0.0f, 0.0f);
@@ -175,6 +252,8 @@ hardware_interface::return_type DiffBotSystemHardware::read(
 
   if(motors_front_.readData((vel_front_right), (vel_front_left), (pos_front_right), (pos_front_left)))
   {
+    front_link_.last_data_ns.store(steady_now_ns());
+    front_link_.lines_received.fetch_add(1);
     set_state("front_right_wheel_joint/velocity",static_cast<double>(vel_front_right));
     set_state("front_left_wheel_joint/velocity",static_cast<double>(vel_front_left));
     set_state("front_right_wheel_joint/position", static_cast<double>(pos_front_right));
@@ -182,6 +261,8 @@ hardware_interface::return_type DiffBotSystemHardware::read(
   }
   if(motors_rear_.readData((vel_rear_right), (vel_rear_left), (pos_rear_right), (pos_rear_left)))
   {
+    rear_link_.last_data_ns.store(steady_now_ns());
+    rear_link_.lines_received.fetch_add(1);
     set_state("rear_right_wheel_joint/velocity",static_cast<double>(vel_rear_right));
     set_state("rear_left_wheel_joint/velocity",static_cast<double>(vel_rear_left));
     set_state("rear_right_wheel_joint/position", static_cast<double>(pos_rear_right));
@@ -200,8 +281,14 @@ hardware_interface::return_type r5 ::DiffBotSystemHardware::write(
   float vel_rear_right = static_cast<float>(get_command("rear_right_wheel_joint/velocity"));
   float vel_rear_left = static_cast<float>(get_command("rear_left_wheel_joint/velocity"));
 
-  motors_front_.writeData(vel_front_right,vel_front_left);
-  motors_rear_.writeData(vel_rear_right,vel_rear_left);
+  if (!motors_front_.writeData(vel_front_right,vel_front_left))
+  {
+    front_link_.write_failures.fetch_add(1);
+  }
+  if (!motors_rear_.writeData(vel_rear_right,vel_rear_left))
+  {
+    rear_link_.write_failures.fetch_add(1);
+  }
 
   return hardware_interface::return_type::OK;
 }

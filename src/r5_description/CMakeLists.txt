@@ -7,6 +7,7 @@ export_windows_symbols()
 
 # find dependencies
 set(THIS_PACKAGE_INCLUDE_DEPENDS
+  diagnostic_msgs
   hardware_interface
   pluginlib
   rclcpp
@@ -47,6 +48,7 @@ $<BUILD_INTERFACE:${PROJECT_SOURCE_DIR}/hardware/include>
 $<INSTALL_INTERFACE:include/r5>
 )
 target_link_libraries(r5 PUBLIC
+  ${diagnostic_msgs_TARGETS}
   hardware_interface::hardware_interface
   pluginlib::pluginlib
   rclcpp::rclcpp
