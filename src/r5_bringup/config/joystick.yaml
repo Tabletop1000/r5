@@ -1,0 +1,29 @@
+# Xbox controller connected to the robot, read through the Linux xpad driver.
+# Hold LB to drive, and hold RB as well for full speed. Y (button 3) is left free, because the
+# dashboard's field_manager uses it to start and stop boundary recording.
+joy_node:
+  ros__parameters:
+    device_id: 0
+    deadzone: 0.1
+    # Repeat while a button is held, so releasing LB is noticed within twist_mux's 0.5 s timeout.
+    autorepeat_rate: 20.0
+
+teleop_twist_joy_node:
+  ros__parameters:
+    publish_stamped_twist: true
+    frame: base_footprint
+    require_enable_button: true
+    enable_button: 4  # LB
+    enable_turbo_button: 5  # RB
+    axis_linear:  # left stick vertical
+      x: 1
+    scale_linear:
+      x: 0.15
+    scale_linear_turbo:
+      x: 0.3  # linear.x.max_velocity in diffbot_controllers.yaml
+    axis_angular:  # right stick horizontal
+      yaw: 3
+    scale_angular:
+      yaw: 0.6
+    scale_angular_turbo:
+      yaw: 1.0  # angular.z.max_velocity in diffbot_controllers.yaml

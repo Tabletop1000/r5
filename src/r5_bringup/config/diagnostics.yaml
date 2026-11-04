@@ -1,0 +1,31 @@
+# Groups /diagnostics into /diagnostics_agg for the dashboard, which shows the last part of each
+# path as the alert's source. Anything unmatched appears under Other.
+#
+# The sensor groups discard stale items, because it isn't confirmed yet that the BNO055 and u-blox
+# drivers publish diagnostics. Without that, an empty group shows as a permanent Stale alert. Once a
+# driver is seen in /diagnostics on the robot, remove its discard_stale so a silent driver alerts.
+analyzers:
+  ros__parameters:
+    path: ""
+    sensors:
+      type: diagnostic_aggregator/AnalyzerGroup
+      path: Sensors
+      analyzers:
+        imu:
+          type: diagnostic_aggregator/GenericAnalyzer
+          path: IMU
+          contains: ["bno055", "BNO055"]
+          discard_stale: true
+        gps:
+          type: diagnostic_aggregator/GenericAnalyzer
+          path: GPS
+          contains: ["ublox", "fix"]
+          discard_stale: true
+    motors:
+      type: diagnostic_aggregator/GenericAnalyzer
+      path: Motors
+      contains: ["Motor node", "controller_manager"]
+    computer:
+      type: diagnostic_aggregator/GenericAnalyzer
+      path: Computer
+      contains: ["Computer", "WiFi"]

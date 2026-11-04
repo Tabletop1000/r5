@@ -1,0 +1,26 @@
+# Chooses which velocity command reaches the base controller. The highest priority input that has
+# sent a command within its timeout wins. Its output is /cmd_vel.
+twist_mux:
+  ros__parameters:
+    use_stamped: true
+    topics:
+      stop:  # the dashboard's software Stop (spec NAV-4), above everything else
+        topic: /mux/stop
+        timeout: 0.5
+        priority: 255
+      joystick:  # Xbox controller, only while the deadman button is held
+        topic: /mux/joy
+        timeout: 0.5
+        priority: 100
+      keyboard:  # teleop_twist_keyboard, for development
+        topic: /mux/keyboard
+        timeout: 0.5
+        priority: 90
+      motor_test:  # the dashboard's motor test
+        topic: /mux/test
+        timeout: 0.5
+        priority: 50
+      navigation:  # Nav2's velocity smoother
+        topic: /mux/nav
+        timeout: 0.5
+        priority: 10
