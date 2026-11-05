@@ -5,6 +5,10 @@ callbacks wait for other callbacks to run. That executor costs far more per mess
 single-threaded one: on a laptop, two 30 Hz odometry subscriptions took 92% of a core with it
 and 8% without it. Subscriptions that only store the latest message go on this node instead.
 Their callbacks then run in this node's thread, so they must not block.
+
+In the simulator these nodes still use most of a core, because use_sim_time subscribes them to
+Gazebo's /clock at several hundred Hz. Moving that here didn't help: any Python node pays for
+/clock at that rate. The robot has no /clock.
 """
 
 import threading
