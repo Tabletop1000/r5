@@ -47,6 +47,7 @@ RUN apt-get update && DEBIAN_FRONTEND=noninteractive apt-get upgrade -y \
     ros-jazzy-rosbridge-server \
     ros-jazzy-teleop-twist-joy \
     ros-jazzy-teleop-twist-keyboard \
+    ros-jazzy-topic-tools \
     ros-jazzy-twist-mux \
     ros-jazzy-xacro \
     && rm -rf /var/lib/apt/lists/*

@@ -25,6 +25,7 @@ from r5_dashboard_interfaces.action import MotorTest
 from r5_dashboard_interfaces.msg import JobStatus
 from rclpy.qos import DurabilityPolicy, QoSProfile
 
+from .listener import Listener
 from .shutdown import init_without_signal_handlers
 from .motor_test import BOTH, evaluate, side_name, twist_for, wheel_speeds
 
@@ -53,8 +54,11 @@ class MotorTestNode(Node):
 
         group = ReentrantCallbackGroup()
         self.cmd_pub = self.create_publisher(TwistStamped if self.stamped else Twist, cmd_topic, 10)
-        self.create_subscription(JointState, "/joint_states", self.on_joints, 10, callback_group=group)
-        self.create_subscription(Odometry, "/odometry/local", self.on_odometry, 10, callback_group=group)
+        # Frequent topics, on their own single-threaded node (see listener.py). /odometry/local
+        # is remapped to a lower-rate copy in dashboard.launch.py.
+        self.listener = Listener("motor_test_listener")
+        self.listener.node.create_subscription(JointState, "/joint_states", self.on_joints, 10)
+        self.listener.node.create_subscription(Odometry, "/odometry/local", self.on_odometry, 10)
         self.job_active = False
         self.create_subscription(
             JobStatus,
@@ -197,6 +201,7 @@ def main(args=None):
     node = MotorTestNode()
     executor = MultiThreadedExecutor()
     executor.add_node(node)
+    node.listener.start()
     try:
         executor.spin()
     except (KeyboardInterrupt, rclpy.executors.ExternalShutdownException):
@@ -204,6 +209,7 @@ def main(args=None):
     finally:
         node.stop_motors()
         executor.shutdown(timeout_sec=1.0)
+        node.listener.shutdown()
         node.destroy_node()
         rclpy.try_shutdown()
 

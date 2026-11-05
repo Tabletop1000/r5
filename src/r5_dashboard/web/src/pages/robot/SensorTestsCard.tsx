@@ -11,7 +11,7 @@ const IMU_WINDOW_MS = 3000;
 /** Test GPS and Test IMU (spec RB-8). Each listens for a few seconds and checks what arrived. */
 export function SensorTestsCard() {
   const gps = useSensorTest<NavSatFix>(TOPICS.fix, GPS_WINDOW_MS, (s, ms) => evaluateGpsTest(s, ms, ROBOT_CONFIG.gpsRateHz));
-  const imu = useSensorTest<Imu>(TOPICS.imu, IMU_WINDOW_MS, (s, ms) => evaluateImuTest(s, ms, ROBOT_CONFIG.imuRateHz));
+  const imu = useSensorTest<Imu>(TOPICS.imuFullRate, IMU_WINDOW_MS, (s, ms) => evaluateImuTest(s, ms, ROBOT_CONFIG.imuRateHz));
   return (
     <Card title="Sensor tests">
       <div className="test-grid">

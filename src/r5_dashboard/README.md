@@ -196,11 +196,18 @@ robot yet show "Not available"; [TODO_ROBOT.md](TODO_ROBOT.md) lists them.
 | Round trip | `/rosapi/get_time` | rosapi |
 | Versions | `/r5/versions` | `r5_monitor` (`r5` and ROS; motor node firmware not yet) |
 | GPS | `/fix`, `/navpvt` | u-blox driver (`/navpvt` only on the real receiver) |
-| IMU | `/bno055/imu`, `/bno055/calib_status`, `/bno055/temp` | BNO055 driver (the simulator has only `imu`) |
+| IMU | `/r5/dashboard/imu` (the IMU test uses `/bno055/imu`), `/bno055/calib_status`, `/bno055/temp` | BNO055 driver (the simulator has only `imu`) |
 | Wheels | `/joint_states` | joint_state_broadcaster |
 | Motor test | `/r5/motor_test` | `motor_test` |
 | Fields, home | `/r5/fields/*`, `/r5/home/*` services, `/r5/fields/revision` | `field_manager` |
 | Spray jobs | `/r5/job/defaults`, `plan`, `start`, `pause`, `resume` services; `/r5/job/status`, `/r5/job/plan` topics; `/r5/stop` | `job_manager` (uses Nav2 `/follow_path`, `/navigate_to_pose`, `/speed_limit` and robot_localization `/fromLL`) |
 | Sprayer | `/r5/sprayer/enable`, `/r5/sprayer/flow_setpoint` | Published by `job_manager`; placeholder until the sprayer exists |
 | Boundary recording | `/r5/recording/start`, `stop`, `clear`, `/r5/recording/status` | `field_manager` (reads `/fix`, `/navpvt`, `/joy`) |
-| Current action, STOP | `/r5/job/status`, `/r5/stop`, `/odometry/local` | `job_manager` |
+| Current action, STOP | `/r5/job/status`, `/r5/stop`, `/r5/dashboard/odometry/local` | `job_manager` |
+
+Topics under `/r5/dashboard/` are lower-rate copies made by `dashboard.launch.py`, at 5 Hz, or 10 Hz
+for `/odometry/global`. The full-rate topics cost too much CPU on the Raspberry Pi: rosbridge's
+`throttle_rate` drops messages only after converting them, and every message a Python node receives
+costs time even if it's ignored. The dashboard's nodes subscribe to the copies too, through
+remappings in the launch file. Subscribe new dashboard features to a copy, or add one, rather than
+to a fast topic.

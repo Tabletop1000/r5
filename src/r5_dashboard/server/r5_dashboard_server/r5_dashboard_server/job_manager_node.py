@@ -50,6 +50,7 @@ from .auth import write_private_file
 from .coverage import SWATH, PlanError, RobotLimits, SpraySettings, plan_coverage
 from .fields import FIX_NAMES, REQUIREMENTS, FieldStore, fix_quality
 from .job import Affine2D, Tank, along_track, angle_difference, extend_line, flow_for_speed, heading, sprayer_should_be_on
+from .listener import Listener
 from .shutdown import init_without_signal_handlers
 
 try:  # Only on the real robot.
@@ -161,12 +162,16 @@ class JobManagerNode(Node):
         self.speed = 0.0
         self.battery: float | None = None
         self.alert_errors: list[str] = []
-        self.create_subscription(NavSatFix, "/fix", self.on_fix, qos_profile_sensor_data, callback_group=group)
+        # Frequent topics, on their own single-threaded node (see listener.py). The odometry
+        # topics are remapped to lower-rate copies in dashboard.launch.py.
+        self.listener = Listener("job_manager_listener")
+        sub = self.listener.node.create_subscription
+        sub(NavSatFix, "/fix", self.on_fix, qos_profile_sensor_data)
         if NavPVT is not None:
-            self.create_subscription(NavPVT, "/navpvt", self.on_navpvt, qos_profile_sensor_data, callback_group=group)
-        self.create_subscription(Odometry, "/odometry/global", self.on_global, 10, callback_group=group)
-        self.create_subscription(Odometry, "/odometry/local", self.on_local, 10, callback_group=group)
-        self.create_subscription(BatteryState, "/battery_state", self.on_battery, 10, callback_group=group)
+            sub(NavPVT, "/navpvt", self.on_navpvt, qos_profile_sensor_data)
+        sub(Odometry, "/odometry/global", self.on_global, 10)
+        sub(Odometry, "/odometry/local", self.on_local, 10)
+        sub(BatteryState, "/battery_state", self.on_battery, 10)
         self.create_subscription(AlertArray, "/r5/alerts", self.on_alerts, latched, callback_group=group)
 
         self.create_service(GetJobDefaults, "/r5/job/defaults", self.on_defaults, callback_group=group)
@@ -737,6 +742,7 @@ def main(args=None):
     node = JobManagerNode()
     executor = MultiThreadedExecutor()
     executor.add_node(node)
+    node.listener.start()
     try:
         executor.spin()
     except (KeyboardInterrupt, rclpy.executors.ExternalShutdownException):
@@ -747,6 +753,7 @@ def main(args=None):
         node.publish_sprayer(False, 0.0)
         node.publish_zero_velocity()
         executor.shutdown(timeout_sec=1.0)
+        node.listener.shutdown()
         node.destroy_node()
         rclpy.try_shutdown()
 

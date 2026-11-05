@@ -10,8 +10,21 @@ from launch.actions import DeclareLaunchArgument, IncludeLaunchDescription
 from launch.conditions import IfCondition
 from launch.launch_description_sources import AnyLaunchDescriptionSource
 from launch.substitutions import LaunchConfiguration, PathJoinSubstitution
-from launch_ros.actions import Node
+from launch_ros.actions import ComposableNodeContainer, Node
+from launch_ros.descriptions import ComposableNode
 from launch_ros.substitutions import FindPackageShare
+
+# Lower-rate copies of frequent topics, for rosbridge and the dashboard's Python nodes. Every
+# message a Python subscriber receives costs CPU, even if it's then thrown away, and rosbridge's
+# throttle_rate only drops messages after converting them. The copies are made in C++ without
+# decoding the messages. Each entry is (topic, copy, messages per second).
+THROTTLED = [
+    ("/bno055/imu", "/r5/dashboard/imu", 5.0),
+    ("/odometry/local", "/r5/dashboard/odometry/local", 5.0),
+    # job_manager checks the robot's position along a row at 10 Hz.
+    ("/odometry/global", "/r5/dashboard/odometry/global", 10.0),
+]
+ODOMETRY_REMAPS = [(topic, copy) for topic, copy, _ in THROTTLED if topic.startswith("/odometry/")]
 
 
 def generate_launch_description():
@@ -64,12 +77,40 @@ def generate_launch_description():
         ],
     )
 
+    throttle = ComposableNodeContainer(
+        name="dashboard_throttle",
+        namespace="",
+        package="rclcpp_components",
+        executable="component_container",
+        output="both",
+        composable_node_descriptions=[
+            ComposableNode(
+                package="topic_tools",
+                plugin="topic_tools::ThrottleNode",
+                name="throttle" + copy.replace("/", "_"),
+                parameters=[
+                    {
+                        "input_topic": topic,
+                        "output_topic": copy,
+                        "throttle_type": "messages",
+                        "msgs_per_sec": rate,
+                        # Only subscribes while something uses the copy.
+                        "lazy": True,
+                        "use_wall_clock": True,
+                    }
+                ],
+            )
+            for topic, copy, rate in THROTTLED
+        ],
+    )
+
     robot_status = Node(
         package="r5_dashboard_server",
         executable="robot_status",
         output="both",
         # Operating time and alert times use the wall clock even in simulation.
         parameters=[{"data_dir": data_dir}],
+        remappings=ODOMETRY_REMAPS,
     )
 
     # Wheel geometry and joint names match r5's diffbot_controllers.yaml. Commands go through
@@ -79,6 +120,7 @@ def generate_launch_description():
         executable="motor_test",
         output="both",
         parameters=[{"use_sim_time": use_sim_time, "cmd_vel_topic": "/mux/test"}],
+        remappings=ODOMETRY_REMAPS,
     )
 
     field_manager = Node(
@@ -96,6 +138,7 @@ def generate_launch_description():
         output="both",
         # Wheel and sprayer values are placeholders until the sprayer is built (spec 5.5).
         parameters=[{"data_dir": data_dir, "job_fix_requirement": fix_requirement, "use_sim_time": use_sim_time}],
+        remappings=ODOMETRY_REMAPS,
     )
 
     sprayer_stub = Node(
@@ -106,5 +149,6 @@ def generate_launch_description():
     )
 
     return LaunchDescription(
-        arguments + [rosbridge, server, robot_status, motor_test, field_manager, job_manager, sprayer_stub]
+        arguments
+        + [rosbridge, server, throttle, robot_status, motor_test, field_manager, job_manager, sprayer_stub]
     )

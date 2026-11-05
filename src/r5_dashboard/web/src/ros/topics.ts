@@ -21,7 +21,11 @@ export const TOPICS = {
   fix: { name: '/fix', type: 'sensor_msgs/msg/NavSatFix' },
   /** u-blox position/velocity/time message. Only on the real robot; gives satellites and RTK state. */
   navPvt: { name: '/navpvt', type: 'ublox_msgs/msg/NavPVT', throttleMs: 500 },
-  imu: { name: '/bno055/imu', type: 'sensor_msgs/msg/Imu', throttleMs: 200 },
+  /** A 5 Hz copy of /bno055/imu, made on the robot (dashboard.launch.py). The full-rate topic
+   *  costs rosbridge a lot of CPU, even when throttled, and slows the IMU itself. */
+  imu: { name: '/r5/dashboard/imu', type: 'sensor_msgs/msg/Imu' },
+  /** The full-rate IMU. Only for the IMU test, which measures the rate for a few seconds. */
+  imuFullRate: { name: '/bno055/imu', type: 'sensor_msgs/msg/Imu' },
   /** BNO055 calibration, a JSON string like {"sys": 3, "gyro": 3, "accel": 3, "mag": 3}. */
   imuCalibration: { name: '/bno055/calib_status', type: 'std_msgs/msg/String' },
   imuTemperature: { name: '/bno055/temp', type: 'sensor_msgs/msg/Temperature', throttleMs: 1000 },
@@ -34,7 +38,8 @@ export const TOPICS = {
   jobStatus: { name: '/r5/job/status', type: 'r5_dashboard_interfaces/msg/JobStatus', throttleMs: 250 },
   /** The plan of the current job. */
   jobPlan: { name: '/r5/job/plan', type: 'r5_dashboard_interfaces/msg/CoveragePlan' },
-  odometryLocal: { name: '/odometry/local', type: 'nav_msgs/msg/Odometry', throttleMs: 500 },
+  /** A 5 Hz copy of /odometry/local, made on the robot (dashboard.launch.py). */
+  odometryLocal: { name: '/r5/dashboard/odometry/local', type: 'nav_msgs/msg/Odometry', throttleMs: 500 },
 } as const satisfies Record<string, TopicSpec>;
 
 export const SERVICES = {
