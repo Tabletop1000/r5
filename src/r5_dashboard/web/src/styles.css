@@ -308,6 +308,17 @@ button:disabled {
   font-style: italic;
 }
 
+/* The robot's nickname (Settings page), first in the strip. */
+.robot-name {
+  align-self: center;
+  font-size: 1.15rem;
+  font-weight: 700;
+  max-width: 16em;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 /* ---- Pages ---- */
 
 .page {
@@ -929,6 +940,19 @@ a.button.primary {
   filter: drop-shadow(0 0 2px #fff) drop-shadow(0 1px 2px rgb(0 0 0 / 0.5));
 }
 
+/* The nickname beside the robot marker. Light text with a dark outline reads on map and satellite. */
+.robot-label {
+  font-weight: 700;
+  font-size: 13px;
+  color: #fff;
+  white-space: nowrap;
+  pointer-events: none;
+  text-shadow:
+    0 0 2px #0b2a4d,
+    0 0 3px #0b2a4d,
+    0 1px 3px rgb(0 0 0 / 0.6);
+}
+
 .home-marker {
   width: 26px;
   height: 26px;
@@ -1241,4 +1265,41 @@ label.button.secondary {
   .content {
     padding: 16px;
   }
+}
+
+/* ---- Settings page ---- */
+
+.settings-form {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  margin-bottom: 16px;
+}
+
+.settings-form .hint,
+.settings-form .error {
+  font-weight: 400;
+  margin: 0;
+  font-size: 0.9rem;
+}
+
+.input-with-unit {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.input-with-unit input {
+  flex: 1;
+  min-width: 0;
+  max-width: 12em;
+}
+
+.input-with-unit .unit {
+  font-weight: 400;
+  color: var(--text-muted);
+}
+
+.form select {
+  max-width: 100%;
 }

@@ -8,6 +8,8 @@ export interface TopicSpec {
 }
 
 export const TOPICS = {
+  /** Robot settings and their descriptions, from robot_status (r5_dashboard_server/settings.py). */
+  settings: { name: '/r5/settings', type: 'r5_dashboard_interfaces/msg/RobotSettings' },
   /** Usage counters and service schedule, from r5_dashboard_server's robot_status node. */
   stats: { name: '/r5/stats', type: 'r5_dashboard_interfaces/msg/RobotStats', throttleMs: 1000 },
   /** Active alerts, from robot_status. */
@@ -44,6 +46,7 @@ export const TOPICS = {
 
 export const SERVICES = {
   serviceDone: { name: '/r5/stats/service_done', type: 'std_srvs/srv/Trigger' },
+  setSettings: { name: '/r5/settings/set', type: 'r5_dashboard_interfaces/srv/SetSettings' },
   acknowledgeAlert: { name: '/r5/alerts/acknowledge', type: 'r5_dashboard_interfaces/srv/AcknowledgeAlert' },
   listFields: { name: '/r5/fields/list', type: 'r5_dashboard_interfaces/srv/ListFields' },
   saveField: { name: '/r5/fields/save', type: 'r5_dashboard_interfaces/srv/SaveField' },
@@ -252,6 +255,11 @@ export interface SaveFieldResponse {
   success: boolean;
   message: string;
   field: FieldMsg;
+}
+
+export interface RobotSettingsMsg {
+  schema_json: string;
+  values_json: string;
 }
 
 export interface GetHomeResponse {

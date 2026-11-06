@@ -8,9 +8,12 @@ Publishes  /r5/job/status (JobStatus, latched, on change and 1 Hz)
            /speed_limit (nav2_msgs/SpeedLimit) while a job runs
            /mux/stop (TwistStamped zeros): twist_mux's top-priority input, held for 2 s on Stop
 Uses       Nav2 /follow_path and /navigate_to_pose; robot_localization /fromLL
-Reads      /fix, /navpvt (optional), /odometry/global, /odometry/local, /battery_state, /r5/alerts
+Reads      /fix, /navpvt (optional), /odometry/global, /odometry/local, /battery_state, /r5/alerts,
+           /r5/settings (max speed, link loss), /client_count (rosbridge: connected dashboards)
 
-The job runs here, on the robot, and carries on if the dashboard's link drops (spec AS-7).
+The job runs here, on the robot. If no dashboard is connected for a while, it does what the
+"If the link is lost" setting says: carries on (spec AS-7), returns home, carries on for a while
+and then returns home, or stops. Returning home and stopping both wait for Resume.
 """
 
 from __future__ import annotations
@@ -19,7 +22,7 @@ import json
 import math
 import threading
 import time
-from dataclasses import asdict
+from dataclasses import asdict, replace
 from pathlib import Path
 
 import rclpy
@@ -39,10 +42,10 @@ from rclpy.node import Node
 from rclpy.qos import DurabilityPolicy, QoSProfile, qos_profile_sensor_data
 from robot_localization.srv import FromLL
 from sensor_msgs.msg import BatteryState, NavSatFix
-from std_msgs.msg import Bool, Float32
+from std_msgs.msg import Bool, Float32, Int32
 from std_srvs.srv import Trigger
 
-from r5_dashboard_interfaces.msg import AlertArray, Check, CoveragePlan as PlanMsg, JobStatus, LatLon, PathSection
+from r5_dashboard_interfaces.msg import AlertArray, Check, CoveragePlan as PlanMsg, JobStatus, LatLon, PathSection, RobotSettings
 from r5_dashboard_interfaces.msg import SpraySettings as SettingsMsg
 from r5_dashboard_interfaces.srv import GetJobDefaults, PlanJob, ResumeJob, StartJob
 
@@ -51,6 +54,8 @@ from .coverage import SWATH, PlanError, RobotLimits, SpraySettings, plan_coverag
 from .fields import FIX_NAMES, REQUIREMENTS, FieldStore, fix_quality
 from .job import Affine2D, Tank, along_track, angle_difference, extend_line, flow_for_speed, heading, sprayer_should_be_on
 from .listener import Listener
+from .settings import COMMS_CONTINUE, COMMS_DELAYED_RETURN_HOME, COMMS_STOP, LINK_LOST, values_from_json
+from .settings import defaults as settings_defaults
 from .shutdown import init_without_signal_handlers
 
 try:  # Only on the real robot.
@@ -68,6 +73,8 @@ ACTIVE = {
     JobStatus.RETURNING_TO_WORK,
 }
 FRESH_S = 3.0
+# The states in which the robot is working, so a lost link calls for the link loss action.
+WORKING = {JobStatus.GOING_TO_START, JobStatus.SPRAYING, JobStatus.TURNING, JobStatus.RETURNING_TO_WORK}
 
 
 class JobStopped(Exception):
@@ -172,7 +179,23 @@ class JobManagerNode(Node):
         sub(Odometry, "/odometry/global", self.on_global, 10)
         sub(Odometry, "/odometry/local", self.on_local, 10)
         sub(BatteryState, "/battery_state", self.on_battery, 10)
+        # rosbridge's count of connected clients. Browsers are its only clients, through the
+        # dashboard server, which drops a browser that stops answering its pings for 10 s.
+        sub(Int32, "/client_count", self.on_client_count, latched)
         self.create_subscription(AlertArray, "/r5/alerts", self.on_alerts, latched, callback_group=group)
+        self.robot_settings = settings_defaults()
+        self.create_subscription(RobotSettings, "/r5/settings", self.on_robot_settings, latched, callback_group=group)
+
+        # Link loss (see check_link).
+        # Each loss is numbered, so a short reconnection between checks still counts as a new loss.
+        self.link_down_since: float | None = None
+        self.link_loss = 0  # number of the current or latest loss
+        self.handled_loss = 0  # the loss whose action has been taken
+        self.warned_loss = 0  # the loss the delayed return home has been announced for
+        self.link_message = ""  # the job status message this node set about the loss
+        self.home_requested = threading.Event()
+        self.home_xy: tuple[float, float] | None = None  # in the map frame, while a job runs
+        self.job_speed_mps: float | None = None
 
         self.create_service(GetJobDefaults, "/r5/job/defaults", self.on_defaults, callback_group=group)
         self.create_service(PlanJob, "/r5/job/plan", self.on_plan, callback_group=group)
@@ -195,6 +218,7 @@ class JobManagerNode(Node):
         self.stop_hold_until = 0.0
         self.create_timer(1.0, self.publish_status, callback_group=group)
         self.create_timer(0.1, self.hold_stop, callback_group=group)
+        self.create_timer(1.0, self.check_link, callback_group=group)
         self.publish_status()
         self.publish_sprayer(False, 0.0)
         self.get_logger().info(
@@ -223,6 +247,29 @@ class JobManagerNode(Node):
 
     def on_alerts(self, msg: AlertArray) -> None:
         self.alert_errors = [f"{a.source}: {a.message}" for a in msg.alerts if a.severity >= 2]
+
+    def on_client_count(self, msg: Int32) -> None:
+        if msg.data > 0:
+            self.link_down_since = None
+        elif self.link_down_since is None:
+            self.link_down_since = time.monotonic()
+            self.link_loss += 1
+
+    def on_robot_settings(self, msg: RobotSettings) -> None:
+        self.robot_settings = values_from_json(msg.values_json)
+        top = self.max_speed_kmh() / 3.6
+        if self.job_speed_mps is not None and self.job_speed_mps > top + 1e-6:
+            self.get_logger().info(f"Maximum speed lowered: running job slowed to {top * 3.6:.2f} km/h")
+            self.job_speed_mps = top
+            self.set_speed_limit(top)
+
+    def max_speed_kmh(self) -> float:
+        return min(self.limits.max_speed_kmh, float(self.robot_settings["max_speed_kmh"]))
+
+    def current_limits(self) -> RobotLimits:
+        """The robot's limits, with the user's maximum speed setting applied."""
+        top = self.max_speed_kmh()
+        return replace(self.limits, max_speed_kmh=top, travel_speed_mps=min(self.limits.travel_speed_mps, top / 3.6))
 
     def fix_quality(self) -> int:
         if self.fix is None or time.monotonic() - self.fix_stamp > FRESH_S:
@@ -255,8 +302,11 @@ class JobManagerNode(Node):
                 settings = SpraySettings(**{**saved, "field_id": request.field_id})
             except TypeError:
                 pass
+        top = self.max_speed_kmh()
+        if settings.speed_kmh > top:  # the maximum speed may have been lowered since
+            settings = replace(settings, speed_kmh=top)
         response.settings = settings_to_msg(settings)
-        response.max_speed_kmh = self.limits.max_speed_kmh
+        response.max_speed_kmh = top
         response.pump_max_flow_l_min = self.limits.pump_max_flow_l_min
         response.tank_reserve_fraction = self.limits.tank_reserve_fraction
         return response
@@ -269,13 +319,14 @@ class JobManagerNode(Node):
         if fld is None:
             raise PlanError("Choose a field.")
         home = self.store.get_home()
-        key = (fld.id, fld.modified_s, tuple(asdict(s).values()), home)
+        limits = self.current_limits()
+        key = (fld.id, fld.modified_s, tuple(asdict(s).values()), home, tuple(asdict(limits).values()))
         with self.lock:
             cached = self.plan_cache.get(key)
         if cached is not None:
             return fld, cached
         started = time.monotonic()
-        plan = plan_coverage(fld, s, self.limits, home)
+        plan = plan_coverage(fld, s, limits, home)
         self.get_logger().info(f"Planned {fld.name}: {plan.swath_count} rows in {time.monotonic() - started:.1f} s")
         with self.lock:
             self.plan_cache = {k: v for k, v in list(self.plan_cache.items())[-7:]}
@@ -314,7 +365,7 @@ class JobManagerNode(Node):
         out.append(check(Check.FAIL if busy else Check.OK, "Other jobs", "A job is already running." if busy else "None running"))
 
         home = self.store.get_home()
-        out.append(check(Check.OK if home else Check.FAIL, "Home point", "Set" if home else "Set the home point on the Manage Fields page."))
+        out.append(check(Check.OK if home else Check.FAIL, "Home point", "Set" if home else "Set the garage location on the Settings page."))
 
         q = self.fix_quality()
         need = REQUIREMENTS[self.fix_requirement]
@@ -402,6 +453,8 @@ class JobManagerNode(Node):
             self.stop_requested.clear()
             self.pause_requested.clear()
             self.resume_event.clear()
+            self.home_requested.clear()
+            self.handled_loss = self.warned_loss = 0
             self.plan_pub.publish(self.plan_to_msg(fld, plan, s, self.plan_id))
             self.thread = threading.Thread(target=self.run_job, args=(fld, plan, s, self.plan_id), daemon=True)
             self.thread.start()
@@ -535,6 +588,70 @@ class JobManagerNode(Node):
             self.status.sprayer_on = self.sprayer_on
             self.status_pub.publish(self.status)
 
+    # ---- Link loss ----
+
+    def check_link(self) -> None:
+        """Once a second: take the link loss action if the link has been down long enough."""
+        down_since, loss = self.link_down_since, self.link_loss
+        if down_since is None:
+            if self.link_message:
+                with self.lock:
+                    shown = self.status.message == self.link_message
+                if shown and self.handled_loss != loss:
+                    self.set_status(message="")  # the delayed return home is called off
+                self.get_logger().info("Link to the dashboard is back")
+                self.link_message = ""
+            return
+        with self.lock:
+            working = self.status.state in WORKING
+        action = self.robot_settings["comms_loss_action"]
+        if not working or self.handled_loss == loss or action == COMMS_CONTINUE:
+            return
+        down_s = time.monotonic() - down_since
+        timeout_s = float(self.robot_settings["comms_loss_timeout_s"])
+        if down_s < timeout_s:
+            return
+        if action == COMMS_DELAYED_RETURN_HOME:
+            delay_min = float(self.robot_settings["comms_loss_delay_min"])
+            if down_s < timeout_s + delay_min * 60:
+                if self.warned_loss != loss:
+                    self.warned_loss = loss
+                    self.link_message = f"{LINK_LOST}. Carrying on, then returning home after {delay_min:g} min."
+                    self.get_logger().warning(self.link_message)
+                    self.set_status(message=self.link_message)
+                return
+        self.handled_loss = loss
+        if action == COMMS_STOP:
+            self.link_message = f"{LINK_LOST}, so the robot stopped. Press Resume to carry on."
+            self.get_logger().warning(self.link_message)
+            self.set_status(message=self.link_message)
+            self.pause_requested.set()
+        else:
+            self.get_logger().warning(f"{LINK_LOST}: returning home")
+            self.home_requested.set()
+        self.cancel_active_goal()
+
+    def return_home_and_wait(self) -> None:
+        """Link loss: sprayer off, drive home, wait for Resume, then drive back to where it stopped.
+
+        The interrupted goal is then sent again. Nav2 follows a path from the point nearest the
+        robot, and the sprayer goes by position along the row, so nothing is sprayed twice.
+        """
+        self.home_requested.clear()
+        self.publish_sprayer(False, 0.0)
+        stopped_at, stopped_yaw = self.pose, self.yaw
+        if self.home_xy is None or stopped_at is None:
+            self.link_message = f"{LINK_LOST}, but the robot can't drive home, so it stopped. Press Resume to carry on."
+            self.set_status(message=self.link_message)
+            self.pause_requested.set()
+            return
+        self.navigate_to(self.home_xy, 0.0, JobStatus.RETURNING_HOME, "Returning home: link lost", any_heading=True)
+        self.link_message = f"{LINK_LOST}, so the robot drove home. Press Resume to carry on."
+        self.set_status(message=self.link_message)
+        self.pause_requested.set()
+        self.check_pause(JobStatus.RETURNING_TO_WORK, "Returning to where the robot stopped")
+        self.navigate_to(stopped_at, stopped_yaw, JobStatus.RETURNING_TO_WORK, "Returning to where the robot stopped")
+
     # ---- Running a job ----
 
     def run_job(self, fld, plan, s: SpraySettings, plan_id: int) -> None:
@@ -566,6 +683,8 @@ class JobManagerNode(Node):
             sections = [(x.kind, [transform.apply(p) for p in x.points], x.length) for x in plan.sections]
             home_ll = self.store.get_home()
             home = transform.apply(plan.projection.to_xy(home_ll)) if home_ll else None
+            self.home_xy = home
+            self.job_speed_mps = speed_mps
             self.set_speed_limit(speed_mps)
 
             first = sections[0][1]
@@ -598,6 +717,8 @@ class JobManagerNode(Node):
 
     def finish(self, state: int, action: str, message: str) -> None:
         self.publish_sprayer(False, 0.0)
+        self.job_speed_mps = None
+        self.home_requested.clear()
         self.set_speed_limit(0.0)  # 0 removes the limit
         self.publish_zero_velocity()
         self.active_goal = None
@@ -638,7 +759,8 @@ class JobManagerNode(Node):
         def monitor() -> bool:
             """Sprayer by position along the row; returns True once past the row's end."""
             now = time.monotonic()
-            dt, last["t"] = now - last["t"], now
+            # Capped, so time spent paused or driving home isn't counted as spraying time.
+            dt, last["t"] = min(now - last["t"], 0.5), now
             if self.pose is None:
                 return False
             along, offset = along_track(self.pose, start, end)
@@ -685,6 +807,9 @@ class JobManagerNode(Node):
         failures = 0
         while True:
             self.check_pause(state, action)
+            if self.home_requested.is_set():
+                self.return_home_and_wait()
+                continue  # check_pause again: returning home may have ended in a pause
             self.set_status(state=state, current_action=action)
             if not client.wait_for_server(timeout_sec=5.0):
                 raise RuntimeError("Nav2 isn't running")
@@ -694,8 +819,12 @@ class JobManagerNode(Node):
             self.active_goal = handle
             result_future = handle.get_result_async()
             finished_early = False
+
+            def interrupted() -> bool:
+                return self.stop_requested.is_set() or self.pause_requested.is_set() or self.home_requested.is_set()
+
             while not result_future.done():
-                if self.stop_requested.is_set() or self.pause_requested.is_set():
+                if interrupted():
                     handle.cancel_goal_async()
                     break
                 if monitor and monitor():
@@ -703,7 +832,7 @@ class JobManagerNode(Node):
                     handle.cancel_goal_async()
                     break
                 time.sleep(0.1)
-            if not (finished_early or self.stop_requested.is_set() or self.pause_requested.is_set()):
+            if not (finished_early or interrupted()):
                 status = result_future.result().status
             else:
                 try:
@@ -716,8 +845,8 @@ class JobManagerNode(Node):
                 return
             if self.stop_requested.is_set():
                 raise JobStopped
-            if self.pause_requested.is_set():
-                continue  # check_pause waits, then the goal is sent again
+            if self.pause_requested.is_set() or self.home_requested.is_set():
+                continue  # check_pause waits or the robot goes home, then the goal is sent again
             failures += 1
             if failures >= 2:
                 self.get_logger().warning("Navigation failed twice; pausing the job")

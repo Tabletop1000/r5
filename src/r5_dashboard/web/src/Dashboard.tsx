@@ -5,6 +5,7 @@ import { StatusStrip } from './components/StatusStrip';
 import { PlaceholderPage } from './pages/PlaceholderPage';
 import { RobotPage } from './pages/robot/RobotPage';
 import { FieldsPage } from './pages/fields/FieldsPage';
+import { SettingsPage } from './pages/settings/SettingsPage';
 import { SprayPage } from './pages/spray/SprayPage';
 import { RobotConnection, defaultRosUrl } from './ros/connection';
 import { RobotContext } from './ros/RobotContext';
@@ -57,6 +58,8 @@ function renderPage(page: PageId) {
       return <PlaceholderPage title="Mow" message="Coming soon. Mowing is not available yet." />;
     case 'robot':
       return <RobotPage />;
+    case 'settings':
+      return <SettingsPage />;
   }
 }
 

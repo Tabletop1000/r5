@@ -14,6 +14,7 @@ import { toRing, type FieldDraft } from '../fields/geo';
 import { useTopic } from '../ros/RobotContext';
 import { TOPICS, type Imu, type LatLon, type NavSatFix } from '../ros/topics';
 import { compassHeading, quaternionToEuler } from '../robot/imu';
+import { useRobotName } from '../settings/useSettings';
 import { useMap } from './MapView';
 
 type WithoutSource<T> = T extends unknown ? Omit<T, 'source'> : never;
@@ -168,8 +169,36 @@ export function RobotMarker() {
   const imu = useTopic<Imu>(TOPICS.imu).message;
   const position = fix && fix.status.status >= 0 ? { latitude: fix.latitude, longitude: fix.longitude } : null;
   const heading = imu ? compassHeading(quaternionToEuler(imu.orientation).yawDeg) : 0;
-  useMarker('robot-marker', position, heading, 'R5');
+  const name = useRobotName();
+  useMarker('robot-marker', position, heading, name);
+  useLabel('robot-label', position, name);
   return null;
+}
+
+/** Text beside a marker. A marker of its own, so it stays upright when the robot marker turns. */
+function useLabel(className: string, position: LatLon | null, text: string) {
+  const map = useMap();
+  const marker = useRef<Marker | null>(null);
+  useEffect(() => {
+    const el = document.createElement('div');
+    el.className = className;
+    el.textContent = text;
+    marker.current = new Marker({ element: el, anchor: 'left', offset: [16, 0] });
+    return () => {
+      marker.current?.remove();
+      marker.current = null;
+    };
+  }, [map, className, text]);
+  useEffect(() => {
+    const m = marker.current;
+    if (!m) return;
+    if (!position) {
+      m.remove();
+      return;
+    }
+    m.setLngLat([position.longitude, position.latitude]);
+    if (!m.getElement().isConnected) m.addTo(map);
+  }, [map, position, text]);
 }
 
 export function HomeMarker({ position }: { position: LatLon | null }) {

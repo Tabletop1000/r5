@@ -101,7 +101,7 @@ dependencies with the usual `rosdep` command (see the `r5` repository's `doc/dev
 | --- | --- |
 | `rosbridge_websocket`, `rosapi` | The ROS link, on localhost only |
 | `server` | HTTPS, login, web app, WebSocket proxy |
-| `robot_status` | Operating hours, distance, service schedule (`/r5/stats`); active alerts from `/diagnostics_agg` and its own checks (`/r5/alerts`); services to record a service and acknowledge an alert |
+| `robot_status` | Operating hours, distance, service schedule (`/r5/stats`); active alerts from `/diagnostics_agg` and its own checks (`/r5/alerts`); services to record a service and acknowledge an alert; the robot settings (`/r5/settings`, `/r5/settings/set`) |
 | `motor_test` | `/r5/motor_test` action: drives one side or both slowly for 2 s and checks the wheel speeds. Speed and time are fixed on the robot. |
 | `job_manager` | Plans area spray jobs with Fields2Cover and runs them with Nav2: `FollowPath` for rows and turns, `NavigateToPose` to the start and home. Switches the sprayer by position along each row, estimates the tank, drives home to refill, and handles pause, resume and the software stop (`/r5/stop`), which holds zero velocity on `twist_mux`'s top-priority input for 2 s. Its parameters (boom width, tank, pump, speeds, turn radius, Nav2 goal tolerance, checks) are listed at the top of `job_manager_node.py`. |
 | `sprayer_stub` | Optional stand-in for the sprayer: logs `/r5/sprayer/enable` and `/r5/sprayer/flow_setpoint` |
@@ -116,9 +116,10 @@ dependencies with the usual `rosdep` command (see the `r5` repository's `doc/dev
 | `tls/cert.pem`, `tls/key.pem` | Self-signed certificate, made on first start. Delete both to make a new one. |
 | `stats.json` | Operating time, distance, last service. Saved every minute and on shutdown. |
 | `service_log.json` | Every service recorded with "Service done" |
+| `settings.json` | Robot settings from the Settings page |
 | `job_settings.json` | Last-used spray settings for each field |
 | `fields/<id>.geojson` | One file per field: boundary, keep-out zones and settings. Opens directly in QGIS. |
-| `home.geojson` | The home point |
+| `home.geojson` | The home point (garage location) |
 | `map.json` | Optional: map tile sources (see below) |
 
 ### Importing and exporting fields
@@ -132,12 +133,32 @@ example from QGIS or Google Earth, and opens it in the editor to check and save:
 - The largest polygon becomes the boundary. Holes in it, and smaller polygons, become keep-out
   zones. The name comes from the file's `name` property or the file name.
 
+### Settings
+
+The Settings page holds the robot's nickname, maximum speed and link loss behaviour, and sets the
+garage location (home). The robot describes each setting, with its range and help text, in
+`server/r5_dashboard_server/r5_dashboard_server/settings.py`, and the page builds its form from
+those descriptions. To add a setting:
+
+1. Add a `Setting` to `SETTINGS` in `settings.py`. Its key, type, default and range are all there.
+2. Read it where it's used. A node subscribes to `/r5/settings` (latched) and calls
+   `values_from_json`, which fills in defaults. The web app uses `useSettings()`.
+
+The page needs no change. Values are checked on the robot when saved, and a saved value that's no
+longer valid falls back to its default.
+
 ### When the WiFi link drops
 
 Everything runs on the robot, so jobs and recordings carry on. The dashboard pings the robot every
-few seconds. After 8 s with no reply it shows "Disconnected — robot continues on its own", even if
+few seconds. After 8 s with no reply it shows "Disconnected", with what the robot will do, even if
 the browser hasn't noticed the link has gone, and keeps trying to reconnect. When the link is back
 it reconnects by itself and shows the current state.
+
+On the robot, `job_manager` counts the link as lost when rosbridge has had no clients for the time
+set on the Settings page (`/client_count`). Browsers are rosbridge's only clients, through the
+dashboard server, which drops a browser that doesn't answer its pings within about 15 s. A phone
+that locks its screen usually drops its connection too. What a running job does then is the
+"If the link is lost" setting. Returning home and stopping both raise an alert and wait for Resume.
 
 ### Map tiles
 
@@ -200,6 +221,7 @@ robot yet show "Not available"; [TODO_ROBOT.md](TODO_ROBOT.md) lists them.
 | Wheels | `/joint_states` | joint_state_broadcaster |
 | Motor test | `/r5/motor_test` | `motor_test` |
 | Fields, home | `/r5/fields/*`, `/r5/home/*` services, `/r5/fields/revision` | `field_manager` |
+| Settings, nickname | `/r5/settings`, `/r5/settings/set` | `robot_status` |
 | Spray jobs | `/r5/job/defaults`, `plan`, `start`, `pause`, `resume` services; `/r5/job/status`, `/r5/job/plan` topics; `/r5/stop` | `job_manager` (uses Nav2 `/follow_path`, `/navigate_to_pose`, `/speed_limit` and robot_localization `/fromLL`) |
 | Sprayer | `/r5/sprayer/enable`, `/r5/sprayer/flow_setpoint` | Published by `job_manager`; placeholder until the sprayer exists |
 | Boundary recording | `/r5/recording/start`, `stop`, `clear`, `/r5/recording/status` | `field_manager` (reads `/fix`, `/navpvt`, `/joy`) |

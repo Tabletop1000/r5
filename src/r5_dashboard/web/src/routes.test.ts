@@ -6,6 +6,7 @@ describe('pageFromHash', () => {
     expect(pageFromHash('#/robot')).toBe('robot');
     expect(pageFromHash('#robot')).toBe('robot');
     expect(pageFromHash('#/spray/area')).toBe('spray');
+    expect(pageFromHash('#/settings')).toBe('settings');
   });
   it('falls back to the default page', () => {
     expect(pageFromHash('')).toBe(DEFAULT_PAGE);

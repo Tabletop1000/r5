@@ -1,18 +1,26 @@
-import { useState, type ReactNode } from 'react';
+import { useEffect, useState, type ReactNode } from 'react';
 import { useNow } from '../hooks/useNow';
 import { useLinkState, useRobot, useTopic } from '../ros/RobotContext';
 import { JOB_ACTIVE, SERVICES, TOPICS, type AlertArray, type BatteryState, type JobStatus, type Odometry, type TriggerResponse } from '../ros/topics';
+import { linkLossText } from '../settings/settings';
+import { useRobotName, useSettings } from '../settings/useSettings';
 import { batteryPercent, countAlerts, formatAge, isStale } from '../status';
 
 const NOT_AVAILABLE = 'Not available';
 
 /**
- * Always-visible strip with link state, battery, current action and alerts (spec NAV-3).
+ * Always-visible strip with the robot's nickname, link state, battery, current action and alerts (spec NAV-3).
  * Values older than 5 s are greyed out as stale (spec NF-3).
  */
 export function StatusStrip() {
   const now = useNow();
   const link = useLinkState();
+  const name = useRobotName();
+  // The last settings received stay in state while disconnected.
+  const settings = useSettings();
+  useEffect(() => {
+    document.title = `${name} Dashboard`;
+  }, [name]);
   const battery = useTopic<BatteryState>(TOPICS.battery);
   const alertList = useTopic<AlertArray>(TOPICS.alerts);
 
@@ -33,11 +41,14 @@ export function StatusStrip() {
   else if (link.status === 'connecting') linkText = 'Connecting…';
   else {
     const age = link.lastContact ? ` · last contact ${formatAge(now - link.lastContact)} ago` : '';
-    linkText = `Disconnected — robot continues on its own${age}`;
+    linkText = `Disconnected — ${linkLossText(settings?.values)}${age}`;
   }
 
   return (
     <header className="status-strip" aria-label="Robot status">
+      <div className="robot-name" title="Change the nickname on the Settings page">
+        {name}
+      </div>
       <StatusItem label="Link" tone={link.status === 'connected' ? 'good' : link.status === 'connecting' ? 'neutral' : 'bad'}>
         <span role="status">{linkText}</span>
       </StatusItem>

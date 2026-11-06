@@ -1,0 +1,7 @@
+# Change some robot settings. Either every value is valid and they're all saved, or nothing changes.
+
+# A JSON object of setting key to new value.
+string values_json
+---
+bool success
+string message

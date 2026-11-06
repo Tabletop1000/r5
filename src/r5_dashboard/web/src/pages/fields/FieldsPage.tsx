@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState, useSyncExternalStore } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 import { Card } from '../../components/Card';
 import { ConfirmDialog } from '../../components/ConfirmDialog';
 import { FieldThumb } from '../../fields/FieldThumb';
@@ -6,7 +6,6 @@ import { DEFAULT_HEADLAND_M, draftFromMsg, formatArea, msgFromDraft, type FieldD
 import { formatDate } from '../../fields/time';
 import { exportFileName, fieldToGeoJson, ImportError, parseFieldFile } from '../../fields/importExport';
 import { useFields } from '../../fields/useFields';
-import { MapClickPicker } from '../../map/HomePlacer';
 import { FieldsLayer, FitTo, HomeMarker, RobotMarker, TrackLayer } from '../../map/layers';
 import { MapView } from '../../map/MapView';
 import { useLinkState, useRobot, useTopic } from '../../ros/RobotContext';
@@ -38,7 +37,7 @@ const newDraft = (source: FieldDraft['source'], boundary: LatLon[] = []): FieldD
   notes: '',
 });
 
-/** Manage Fields (spec 4.1): list, view, add (draw or record), edit, rename, delete, home point. */
+/** Manage Fields (spec 4.1): list, view, add (draw or record), edit, rename, delete. The home point is on the Settings page. */
 export function FieldsPage() {
   const link = useLinkState();
   const { fields, home, error, reload } = useFields();
@@ -152,7 +151,6 @@ export function FieldsPage() {
               />
             )
           )}
-          <HomeCard home={home} robotPosition={robotPosition} />
         </div>
 
         <MapView className="fields-map">
@@ -161,35 +159,10 @@ export function FieldsPage() {
           <HomeMarker position={home ?? null} />
           <RobotMarker />
           {recordingVisible && <TrackLayer points={recording.points} closed={recording.state === RECORDING_STATE.FINISHED} />}
-          <HomePlacing />
         </MapView>
       </div>
     </section>
   );
-}
-
-// Home placing is triggered from HomeCard and handled on the map; a tiny shared store links them.
-const placing = { active: false, listeners: new Set<() => void>(), onPick: null as ((p: LatLon) => void) | null };
-function setPlacing(active: boolean, onPick: ((p: LatLon) => void) | null = null) {
-  placing.active = active;
-  placing.onPick = onPick;
-  placing.listeners.forEach((l) => l());
-}
-const subscribePlacing = (l: () => void) => {
-  placing.listeners.add(l);
-  return () => placing.listeners.delete(l);
-};
-function usePlacing() {
-  return useSyncExternalStore(subscribePlacing, () => placing.active);
-}
-function HomePlacing() {
-  const active = usePlacing();
-  const pick = useCallback((p: LatLon) => {
-    const cb = placing.onPick;
-    setPlacing(false);
-    cb?.(p);
-  }, []);
-  return <MapClickPicker active={active} onPick={pick} />;
 }
 
 function AddFieldCard({
@@ -412,55 +385,6 @@ function FieldDetails({
       >
         <p>The field's boundary, keep-out zones and settings will be removed from the robot. This can't be undone.</p>
       </ConfirmDialog>
-    </Card>
-  );
-}
-
-function HomeCard({ home, robotPosition }: { home: LatLon | null | undefined; robotPosition: LatLon | null }) {
-  const robot = useRobot();
-  const active = usePlacing();
-  const [error, setError] = useState<string | null>(null);
-  const [note, setNote] = useState<string | null>(null);
-  useEffect(() => () => setPlacing(false), []);
-
-  async function setHome(position: LatLon) {
-    setError(null);
-    try {
-      const resp = await robot.callService<{ position: LatLon }, TriggerResponse>(SERVICES.setHome, { position });
-      if (resp.success) setNote('Home point set.');
-      else setError(resp.message);
-    } catch (err) {
-      setError((err as Error).message);
-    }
-  }
-
-  return (
-    <Card title="Home point">
-      <p className="muted small">Where the robot goes to have its tank refilled. A spray job can't start until it is set.</p>
-      <p>
-        {home === undefined
-          ? 'Loading…'
-          : home === null
-            ? 'Not set.'
-            : `Set at ${home.latitude.toFixed(6)}, ${home.longitude.toFixed(6)}.`}
-      </p>
-      <div className="button-row">
-        <button type="button" className="secondary small" disabled={!robotPosition} onClick={() => robotPosition && void setHome(robotPosition)}>
-          Use robot's position
-        </button>
-        {active ? (
-          <button type="button" className="secondary small" onClick={() => setPlacing(false)}>
-            Cancel placing
-          </button>
-        ) : (
-          <button type="button" className="secondary small" onClick={() => setPlacing(true, (p) => void setHome(p))}>
-            Place on map
-          </button>
-        )}
-      </div>
-      {active && <p className="hint">Click the map where home should be.</p>}
-      {note && <p className="note">{note}</p>}
-      {error && <p className="error">{error}</p>}
     </Card>
   );
 }

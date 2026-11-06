@@ -1,14 +1,17 @@
-"""robot_status node: usage counters, service schedule and alerts for the dashboard.
+"""robot_status node: usage counters, service schedule, alerts and settings for the dashboard.
 
-Publishes  /r5/stats   (r5_dashboard_interfaces/RobotStats, 1 Hz)
-           /r5/alerts  (r5_dashboard_interfaces/AlertArray, on change and 1 Hz)
+Publishes  /r5/stats     (r5_dashboard_interfaces/RobotStats, 1 Hz)
+           /r5/alerts    (r5_dashboard_interfaces/AlertArray, on change and 1 Hz)
+           /r5/settings  (r5_dashboard_interfaces/RobotSettings, latched, on change)
 Services   /r5/stats/service_done  (std_srvs/Trigger)  record a completed service
            /r5/alerts/acknowledge  (r5_dashboard_interfaces/AcknowledgeAlert)
+           /r5/settings/set        (r5_dashboard_interfaces/SetSettings)
 Reads      /odometry/local, /diagnostics_agg
 """
 
 from __future__ import annotations
 
+import json
 import time
 from pathlib import Path
 
@@ -21,9 +24,10 @@ from rclpy.node import Node
 from rclpy.qos import DurabilityPolicy, QoSProfile
 from std_srvs.srv import Trigger
 
-from r5_dashboard_interfaces.msg import Alert, AlertArray, JobStatus, RobotStats
-from r5_dashboard_interfaces.srv import AcknowledgeAlert
+from r5_dashboard_interfaces.msg import Alert, AlertArray, JobStatus, RobotSettings, RobotStats
+from r5_dashboard_interfaces.srv import AcknowledgeAlert, SetSettings
 
+from .settings import LINK_LOST, SettingsError, SettingsStore, schema_json
 from .shutdown import init_without_signal_handlers
 from .stats import (
     ERROR,
@@ -42,6 +46,7 @@ NO_DIAGNOSTICS_ALERT = "robot:no_diagnostics"
 REFILL_ALERT = "job:refill"
 JOB_PROBLEM_ALERT = "job:problem"
 JOB_FAILED_ALERT = "job:failed"
+LINK_LOST_ALERT = "job:link_lost"
 
 
 def to_time(seconds: float) -> Time:
@@ -64,6 +69,10 @@ class RobotStatusNode(Node):
         except StatsFileDamaged as exc:
             self.get_logger().error(str(exc))
             self.stats = self.store.load()  # Now empty.
+        self.settings_store = SettingsStore(data_dir)
+        self.settings, ignored = self.settings_store.load()
+        if ignored:
+            self.get_logger().warning(f"Using defaults for settings that couldn't be read: {', '.join(ignored)}")
         self.alerts = AlertTracker()
         self.started = time.monotonic()
         self.last_tick = self.started
@@ -72,13 +81,16 @@ class RobotStatusNode(Node):
         latched = QoSProfile(depth=1, durability=DurabilityPolicy.TRANSIENT_LOCAL)
         self.stats_pub = self.create_publisher(RobotStats, "/r5/stats", latched)
         self.alerts_pub = self.create_publisher(AlertArray, "/r5/alerts", latched)
+        self.settings_pub = self.create_publisher(RobotSettings, "/r5/settings", latched)
         self.create_subscription(Odometry, "/odometry/local", self.on_odometry, 10)
         self.create_subscription(DiagnosticArray, "/diagnostics_agg", self.on_diagnostics, 10)
         self.create_subscription(JobStatus, "/r5/job/status", self.on_job, latched)
         self.create_service(Trigger, "/r5/stats/service_done", self.on_service_done)
         self.create_service(AcknowledgeAlert, "/r5/alerts/acknowledge", self.on_acknowledge)
+        self.create_service(SetSettings, "/r5/settings/set", self.on_set_settings)
         self.create_timer(1.0, self.tick)
         self.create_timer(save_period_s, self.save)
+        self.publish_settings()
         self.tick()
 
     # ---- Inputs ----
@@ -106,6 +118,9 @@ class RobotStatusNode(Node):
         )
         paused_by_failure = msg.state == JobStatus.PAUSED and msg.message.startswith("Navigation failed")
         changed |= self.alerts.set_condition(JOB_PROBLEM_ALERT, paused_by_failure, ERROR, "Spray job", msg.message, now)
+        # Stopped or returned home by the "If the link is lost" setting, and waiting for Resume.
+        waiting_for_link = msg.state == JobStatus.PAUSED and msg.message.startswith(LINK_LOST)
+        changed |= self.alerts.set_condition(LINK_LOST_ALERT, waiting_for_link, WARNING, "Spray job", msg.message, now)
         changed |= self.alerts.set_condition(
             JOB_FAILED_ALERT, msg.state == JobStatus.FAILED, ERROR, "Spray job", msg.message, now
         )
@@ -129,6 +144,28 @@ class RobotStatusNode(Node):
         if response.success:
             self.publish_alerts()
         return response
+
+    def on_set_settings(self, request, response):
+        try:
+            changes = json.loads(request.values_json)
+            self.settings = self.settings_store.update(self.settings, changes)
+        except json.JSONDecodeError:
+            response.success, response.message = False, "The settings weren't valid JSON."
+            return response
+        except SettingsError as exc:
+            response.success, response.message = False, str(exc)
+            return response
+        except OSError as exc:
+            self.get_logger().error(f"Couldn't save settings: {exc}")
+            response.success, response.message = False, f"Couldn't save the settings: {exc}"
+            return response
+        self.get_logger().info(f"Settings changed: {json.dumps(changes)}")
+        self.publish_settings()
+        response.success, response.message = True, "Settings saved."
+        return response
+
+    def publish_settings(self) -> None:
+        self.settings_pub.publish(RobotSettings(schema_json=schema_json(), values_json=json.dumps(self.settings)))
 
     # ---- Periodic ----
 

@@ -127,9 +127,10 @@ Wireframe: a gallery of field thumbnails ("New", "River paddock", "East field", 
   (see 6.3). A save is only reported as successful once it is written to disk.
 - **FM-9 Import/export.** **[Proposed]** Export a field as GeoJSON and import a GeoJSON or KML polygon,
   so fields can be prepared or checked in QGIS or Google Earth.
-- **FM-10 Home location.** The robot has one home point, where it goes to be refilled (AS-9). It is
-  shown on the map on this page and set either by placing it on the map or with "Use robot's current
-  position". It is stored on the robot like a field. A spray job cannot start until home is set.
+- **FM-10 Home location.** The robot has one home point, the garage, where it goes to be refilled
+  (AS-9) and when the link is lost (AS-7). It is shown on the map on this page and set on the Settings
+  page with "Set to current location". It is stored on the robot like a field. A spray job cannot
+  start until home is set.
 - **FM-11 Headland display.** The map shows the headland as a shaded strip inside the boundary, so the
   user can see where the robot will turn before saving.
 - **FM-12** In v1 the headland is not sprayed. The robot only turns there. The area shown on field
@@ -170,8 +171,11 @@ tank capacity and flow rate, and an **Upload** button.
   user confirms in a dialog that shows the summary.
 - **AS-6 Monitoring.** While the job runs: robot position and heading on the map, completed vs remaining
   path, % complete, time remaining, liquid used, and Pause / Resume / Stop. **[Proposed]**
-- **AS-7 Link loss.** If the link drops, the robot keeps working. The dashboard shows "Disconnected —
-  robot continuing on its own" with the time since last contact, and resynchronises job state on
+- **AS-7 Link loss.** What a running job does when no dashboard has been connected for a set time
+  is a setting (Settings page): keep working (the default), return home, keep working for a set time
+  and then return home, or stop. Returning home and stopping turn the sprayer off and wait for
+  Resume, which first drives back to where the robot stopped. The dashboard shows "Disconnected"
+  with what the robot will do and the time since last contact, and resynchronises job state on
   reconnect.
 - **AS-8** Only one job can run at a time. Starting is disabled while a job is active.
 - **AS-9 Refilling.** The robot does not refill itself. When the tank runs low:

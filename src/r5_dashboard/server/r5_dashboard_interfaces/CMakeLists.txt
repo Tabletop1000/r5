@@ -16,6 +16,7 @@ rosidl_generate_interfaces(${PROJECT_NAME}
   "msg/LatLon.msg"
   "msg/PathSection.msg"
   "msg/RecordingStatus.msg"
+  "msg/RobotSettings.msg"
   "msg/RobotStats.msg"
   "msg/SpraySettings.msg"
   "srv/AcknowledgeAlert.srv"
@@ -27,6 +28,7 @@ rosidl_generate_interfaces(${PROJECT_NAME}
   "srv/ResumeJob.srv"
   "srv/SaveField.srv"
   "srv/SetHome.srv"
+  "srv/SetSettings.srv"
   "srv/StartJob.srv"
   "action/MotorTest.action"
   DEPENDENCIES builtin_interfaces
