@@ -9,7 +9,7 @@ doesn't need installing on the host.
 | Path | Contents |
 | --- | --- |
 | `src/r5_description` | URDF, ros2_control hardware plugin, controller config and base launch files. The package is named `r5`. |
-| `src/r5_sensors` | Config and launch files for the BNO055 IMU and u-blox GPS |
+| `src/r5_sensors` | The BNO055 IMU driver (C++), and config and launch files for the IMU and u-blox GPS |
 | `src/r5_localisation` | Dual EKF localisation. See its [README](../src/r5_localisation/README.md). |
 | `src/r5_navigation` | Nav2 configuration and launch files |
 | `src/r5_monitor` | Computer temperature, WiFi signal and versions, for the dashboard |
@@ -144,8 +144,8 @@ colcon build
 source install/setup.bash
 ```
 
-A new container needs the `source` step again. The sensor drivers aren't in the image, so the sensor
-launch files only run on the robot.
+A new container needs the `source` step again. The sensor launch files only run on the robot: the
+IMU driver builds anywhere but needs the IMU on `/dev/i2c-1`, and the GPS driver isn't in the image.
 
 After rebuilding the Docker image, clear the old build first. Its files point at libraries from the
 previous image, so `colcon build` fails with `No rule to make target '/opt/ros/jazzy/lib/...'`:

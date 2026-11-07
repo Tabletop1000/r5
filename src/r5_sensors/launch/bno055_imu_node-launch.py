@@ -43,7 +43,7 @@ def generate_launch_description():
         )
         
     node=Node(
-        package = 'bno055',
+        package = 'r5_sensors',
         executable = 'bno055',
         parameters = [config]
     )
