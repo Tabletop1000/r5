@@ -1,6 +1,7 @@
 // Robot settings. The robot describes each setting (r5_dashboard_server/settings.py) and the
 // Settings page builds its form from the descriptions, so a new setting needs no change here.
 
+import { inputNumber, speed, type Units } from '../display/units';
 import type { RobotSettingsMsg } from '../ros/topics';
 
 export const DEFAULT_ROBOT_NAME = 'R5';
@@ -20,6 +21,21 @@ export interface SettingDescription {
   choices?: { value: string; label: string }[];
   /** Only shown while another setting has this value. */
   shown_when?: { key: string; value: string };
+  /** "speed": stored in km/h, shown in the chosen units. */
+  quantity?: string;
+}
+
+/** The unit to show a setting in. */
+export function displayUnit(s: SettingDescription, u: Units): string {
+  return s.quantity === 'speed' ? speed.unit(u) : s.unit;
+}
+
+function toDisplay(s: SettingDescription, value: number, u: Units): number {
+  return s.quantity === 'speed' ? speed.fromKmh(value, u) : value;
+}
+
+function fromDisplay(s: SettingDescription, value: number, u: Units): number {
+  return s.quantity === 'speed' ? speed.toKmh(value, u) : value;
 }
 
 export type SettingValues = Record<string, number | string>;
@@ -71,8 +87,13 @@ export function linkLossText(values: SettingValues | undefined): string {
 /** Form text, as the inputs hold it. */
 export type SettingsForm = Record<string, string>;
 
-export function formFromValues(schema: SettingDescription[], values: SettingValues): SettingsForm {
-  return Object.fromEntries(schema.map((s) => [s.key, String(values[s.key] ?? s.default)]));
+export function formFromValues(schema: SettingDescription[], values: SettingValues, u: Units = 'metric'): SettingsForm {
+  return Object.fromEntries(
+    schema.map((s) => {
+      const v = values[s.key] ?? s.default;
+      return [s.key, s.quantity && typeof v === 'number' ? inputNumber(toDisplay(s, v, u), 2) : String(v)];
+    }),
+  );
 }
 
 export function isShown(s: SettingDescription, form: SettingsForm): boolean {
@@ -80,13 +101,16 @@ export function isShown(s: SettingDescription, form: SettingsForm): boolean {
 }
 
 /** The value to send, or a message for the user. The robot checks again when saving. */
-export function checkSetting(s: SettingDescription, text: string): { value: number | string } | { error: string } {
+export function checkSetting(s: SettingDescription, text: string, u: Units = 'metric'): { value: number | string } | { error: string } {
   if (s.kind === 'number') {
-    const n = text.trim() === '' ? NaN : Number(text);
-    const unit = s.unit ? ` ${s.unit}` : '';
+    const typed = text.trim() === '' ? NaN : Number(text);
+    const n = fromDisplay(s, typed, u);
+    const unitText = displayUnit(s, u);
+    const unit = unitText ? ` ${unitText}` : '';
+    const shown = (limit: number, round: (x: number) => number) => round(toDisplay(s, limit, u) * 100) / 100;
     if (!Number.isFinite(n)) return { error: `${s.label} must be a number.` };
-    if (s.minimum !== undefined && n < s.minimum) return { error: `${s.label} must be at least ${s.minimum}${unit}.` };
-    if (s.maximum !== undefined && n > s.maximum) return { error: `${s.label} can be at most ${s.maximum}${unit}.` };
+    if (s.minimum !== undefined && n < s.minimum - 1e-6) return { error: `${s.label} must be at least ${shown(s.minimum, Math.ceil)}${unit}.` };
+    if (s.maximum !== undefined && n > s.maximum + 1e-6) return { error: `${s.label} can be at most ${shown(s.maximum, Math.floor)}${unit}.` };
     return { value: n };
   }
   if (s.kind === 'text') {
@@ -104,14 +128,18 @@ export function changedSettings(
   schema: SettingDescription[],
   values: SettingValues,
   form: SettingsForm,
+  u: Units = 'metric',
 ): { changes: SettingValues; errors: Record<string, string> } {
   const changes: SettingValues = {};
   const errors: Record<string, string> = {};
+  // Compared as shown, so a value rounded for display (1.08 km/h is 0.67 mph) isn't a change.
+  const shown = formFromValues(schema, values, u);
   for (const s of schema) {
     if (!isShown(s, form)) continue;
-    const checked = checkSetting(s, form[s.key] ?? '');
+    const text = form[s.key] ?? '';
+    const checked = checkSetting(s, text, u);
     if ('error' in checked) errors[s.key] = checked.error;
-    else if (checked.value !== values[s.key]) changes[s.key] = checked.value;
+    else if (text !== shown[s.key] && checked.value !== values[s.key]) changes[s.key] = checked.value;
   }
   return { changes, errors };
 }

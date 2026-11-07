@@ -135,8 +135,9 @@ example from QGIS or Google Earth, and opens it in the editor to check and save:
 
 ### Settings
 
-The Settings page holds the robot's nickname, maximum speed and link loss behaviour, and sets the
-garage location (home). The robot describes each setting, with its range and help text, in
+The Settings page holds the robot's nickname; the units and time zone the dashboard shows; the
+maximum, transit and turn speeds; what a job does when the link is lost, the battery is low or the
+robot is on too steep a slope; and sets the garage location (home). The robot describes each setting, with its range and help text, in
 `server/r5_dashboard_server/r5_dashboard_server/settings.py`, and the page builds its form from
 those descriptions. To add a setting:
 
@@ -145,7 +146,24 @@ those descriptions. To add a setting:
    `values_from_json`, which fills in defaults. The web app uses `useSettings()`.
 
 The page needs no change. Values are checked on the robot when saved, and a saved value that's no
-longer valid falls back to its default.
+longer valid falls back to its default. A speed setting with `quantity="speed"` is stored in km/h and
+shown in the chosen units.
+
+Units are converted only for the user: the robot, its messages and its files stay metric
+(`web/src/display/units.ts`, and `units.py` for the few messages the robot writes). Sensor readings
+on the Robot page stay in SI units.
+
+During a job, `job_manager` sets Nav2's `/speed_limit` for each part: the job's spray speed on rows,
+the turn speed between rows, and the transit speed to the field, home and back. None is above the
+maximum speed. It also watches:
+
+- **Battery** (`/battery_state`): below the low level for 10 s, a running job warns, returns home or
+  stops, as set. `robot_status` raises a "Battery low" alert whatever the job does. Resume is refused
+  until the battery is 5% above the level. Nothing happens until something publishes
+  `/battery_state`.
+- **Slope** (the 5 Hz IMU copy): tilted more than the limit for 1 s, a running job stops, including
+  on its way home. After Resume it doesn't stop again until the robot has been within 2° of the
+  limit, so it can be driven off the slope. This assumes the IMU is mounted level.
 
 ### When the WiFi link drops
 

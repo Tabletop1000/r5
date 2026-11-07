@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { getSession } from './api';
 import { SideMenu } from './components/SideMenu';
+import { DisplayProvider } from './display/DisplayContext';
 import { StatusStrip } from './components/StatusStrip';
 import { PlaceholderPage } from './pages/PlaceholderPage';
 import { RobotPage } from './pages/robot/RobotPage';
@@ -37,13 +38,15 @@ export function Dashboard({ onLogout, onSessionEnded }: Props) {
 
   return (
     <RobotContext.Provider value={robot}>
-      <div className="shell">
-        <SideMenu current={page} onLogout={onLogout} />
-        <div className="main">
-          <StatusStrip />
-          <main className="content">{renderPage(page)}</main>
+      <DisplayProvider>
+        <div className="shell">
+          <SideMenu current={page} onLogout={onLogout} />
+          <div className="main">
+            <StatusStrip />
+            <main className="content">{renderPage(page)}</main>
+          </div>
         </div>
-      </div>
+      </DisplayProvider>
     </RobotContext.Provider>
   );
 }

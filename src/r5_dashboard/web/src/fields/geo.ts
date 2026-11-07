@@ -1,6 +1,7 @@
 // Field geometry and validation. Mirrors server/.../geo.py and fields.py, so problems show up
 // while editing; the robot checks again before saving (spec FM-6).
 
+import { formatArea, formatLength, type Units } from '../display/units';
 import type { FieldMsg, LatLon } from '../ros/topics';
 
 export type XY = [number, number];
@@ -119,7 +120,7 @@ export interface FieldCheck {
   areaM2: number;
 }
 
-export function checkField(d: FieldDraft, otherNames: string[]): FieldCheck {
+export function checkField(d: FieldDraft, otherNames: string[], u: Units = 'metric'): FieldCheck {
   const errors: string[] = [];
   const warnings: string[] = [];
   const name = d.name.trim();
@@ -127,7 +128,7 @@ export function checkField(d: FieldDraft, otherNames: string[]): FieldCheck {
   else if (name.length > MAX_NAME_LENGTH) errors.push(`The name is too long (at most ${MAX_NAME_LENGTH} characters).`);
   else if (otherNames.some((n) => n.toLowerCase() === name.toLowerCase())) errors.push(`There is already a field called “${name}”.`);
   if (!(d.headlandWidthM >= 0 && d.headlandWidthM <= MAX_HEADLAND_M))
-    errors.push(`The headland width must be between 0 and ${MAX_HEADLAND_M} m.`);
+    errors.push(`The headland width must be between 0 and ${formatLength(MAX_HEADLAND_M, u, 0)}.`);
 
   if (d.boundary.length < 3) {
     errors.push('Draw the boundary: at least 3 corners.');
@@ -151,14 +152,13 @@ export function checkField(d: FieldDraft, otherNames: string[]): FieldCheck {
 
   const ha = area / 10_000;
   if (errors.length === 0 && (ha < TYPICAL_AREA_HA.min || ha > TYPICAL_AREA_HA.max))
-    warnings.push(`The field is ${formatArea(area)}. R5 is meant for fields of ${TYPICAL_AREA_HA.min}–${TYPICAL_AREA_HA.max} ha; check the boundary is right.`);
+    warnings.push(
+      `The field is ${formatArea(area, u)}. R5 is meant for fields of ${formatArea(TYPICAL_AREA_HA.min * 10_000, u)} to ${formatArea(TYPICAL_AREA_HA.max * 10_000, u)}; check the boundary is right.`,
+    );
   return { errors, warnings, areaM2: area };
 }
 
-export function formatArea(m2: number): string {
-  const ha = m2 / 10_000;
-  return ha >= 0.1 ? `${ha.toFixed(2)} ha` : `${Math.round(m2).toLocaleString()} m²`;
-}
+export { formatArea } from '../display/units';
 
 // ---- Conversions ----
 

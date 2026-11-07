@@ -1,7 +1,11 @@
 import { useMemo, useState } from 'react';
 import { Card } from '../../components/Card';
 import { ConfirmDialog } from '../../components/ConfirmDialog';
-import { draftFromMsg, formatArea } from '../../fields/geo';
+import { useDisplay } from '../../display/DisplayContext';
+import { formatArea, formatVolume, volume } from '../../display/units';
+import { draftFromMsg } from '../../fields/geo';
+import { linkLossText } from '../../settings/settings';
+import { useSettings } from '../../settings/useSettings';
 import { useFields } from '../../fields/useFields';
 import { FieldsLayer, FitTo, HomeMarker, RobotMarker } from '../../map/layers';
 import { MapView } from '../../map/MapView';
@@ -27,6 +31,8 @@ const STATE_LABEL: Record<number, string> = {
 
 /** A running (or just ended) job: progress, liquid, time left, pause/resume/stop (spec AS-6, AS-9). */
 export function JobMonitor({ status, onDone }: { status: JobStatus; onDone: () => void }) {
+  const { units } = useDisplay();
+  const settings = useSettings();
   const robot = useRobot();
   const link = useLinkState();
   const now = useNow();
@@ -64,8 +70,8 @@ export function JobMonitor({ status, onDone }: { status: JobStatus; onDone: () =
           {status.message && <p className={status.state === JOB_STATE.FAILED ? 'error' : 'note-plain'}>{status.message}</p>}
           {link.status !== 'connected' && !ended && (
             <p className="link-lost" role="alert">
-              Link to the robot lost{link.lastContact ? ` ${formatAge(now - link.lastContact)} ago` : ''}. The robot carries on with the job by
-              itself; these figures are its last report and update again when the link returns.
+              Link to the robot lost{link.lastContact ? ` ${formatAge(now - link.lastContact)} ago` : ''}: {linkLossText(settings?.values)}.
+              These figures are the robot's last report and update again when the link returns.
             </p>
           )}
           <div className="meter" role="meter" aria-label="Progress" aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.round(status.progress * 100)}>
@@ -74,12 +80,12 @@ export function JobMonitor({ status, onDone }: { status: JobStatus; onDone: () =
           </div>
           <dl className="readings">
             <div className="reading"><dt>Rows</dt><dd>{status.swaths_done} of {status.swath_count}</dd></div>
-            <div className="reading"><dt>Area done</dt><dd>{formatArea(status.area_done_m2)}</dd></div>
-            <div className="reading"><dt>Liquid used</dt><dd>{status.liquid_used_l.toFixed(1)} L</dd></div>
+            <div className="reading"><dt>Area done</dt><dd>{formatArea(status.area_done_m2, units)}</dd></div>
+            <div className="reading"><dt>Liquid used</dt><dd>{formatVolume(status.liquid_used_l, units)}</dd></div>
             <div className="reading">
               <dt>Tank (estimated)</dt>
               <dd className={tankFraction < 0.15 ? 'tone-text-warn' : undefined}>
-                {status.tank_remaining_l.toFixed(1)} of {status.tank_capacity_l.toFixed(0)} L
+                {volume.fromL(status.tank_remaining_l, units).toFixed(1)} of {formatVolume(status.tank_capacity_l, units, 0)}
               </dd>
             </div>
             {!ended && <div className="reading"><dt>Time left</dt><dd>about {formatDuration(status.remaining_s)}</dd></div>}
@@ -137,7 +143,7 @@ export function JobMonitor({ status, onDone }: { status: JobStatus; onDone: () =
       >
         <p>The robot will drive back to where it stopped and carry on.</p>
         <label className="inline confirm-check">
-          <input type="checkbox" checked={refilled} onChange={(e) => setRefilled(e.target.checked)} /> The tank has been refilled ({status.tank_capacity_l.toFixed(0)} L)
+          <input type="checkbox" checked={refilled} onChange={(e) => setRefilled(e.target.checked)} /> The tank has been refilled ({formatVolume(status.tank_capacity_l, units, 0)})
         </label>
       </ConfirmDialog>
     </div>

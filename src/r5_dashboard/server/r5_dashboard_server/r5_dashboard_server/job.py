@@ -113,3 +113,45 @@ def sprayer_should_be_on(s: float, offset: float, length: float, boom_width: flo
 def format_duration(seconds: float) -> str:
     minutes = max(0, round(seconds / 60))
     return f"{minutes // 60} h {minutes % 60:02d} min" if minutes >= 60 else f"{minutes} min"
+
+
+def tilt_deg(x: float, y: float, z: float, w: float) -> float:
+    """How far the robot leans from level, in degrees, whichever way, from an orientation quaternion.
+
+    It's the angle between the robot's up axis and vertical, so the IMU must be mounted level.
+    """
+    norm = x * x + y * y + z * z + w * w
+    if norm <= 0:
+        return 0.0
+    cos_tilt = 1.0 - 2.0 * (x * x + y * y) / norm
+    return math.degrees(math.acos(max(-1.0, min(1.0, cos_tilt))))
+
+
+class Episode:
+    """A condition, such as a low battery, that counts once it has held for hold_s.
+
+    It ends only when the clear condition holds, which is set a little apart from the start
+    condition so a reading near the limit doesn't start a new episode every few seconds. Episodes
+    are numbered, so the code acting on them can tell a new one from the one it has handled.
+    """
+
+    def __init__(self, hold_s: float):
+        self.hold_s = hold_s
+        self.since: float | None = None
+        self.active = False
+        self.number = 0
+
+    def update(self, over: bool, clear: bool, now: float) -> None:
+        if self.active:
+            if clear:
+                self.active = False
+                self.since = None
+            return
+        if not over:
+            self.since = None
+            return
+        if self.since is None:
+            self.since = now
+        if now - self.since >= self.hold_s:
+            self.active = True
+            self.number += 1

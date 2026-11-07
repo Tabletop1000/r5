@@ -2,8 +2,10 @@ import { useCallback, useMemo, useState } from 'react';
 import { Card } from '../../components/Card';
 import { ConfirmDialog } from '../../components/ConfirmDialog';
 import { FieldThumb } from '../../fields/FieldThumb';
-import { DEFAULT_HEADLAND_M, draftFromMsg, formatArea, msgFromDraft, type FieldDraft } from '../../fields/geo';
-import { formatDate } from '../../fields/time';
+import { useDisplay } from '../../display/DisplayContext';
+import { formatDate } from '../../display/time';
+import { formatArea, formatLength } from '../../display/units';
+import { DEFAULT_HEADLAND_M, draftFromMsg, msgFromDraft, type FieldDraft } from '../../fields/geo';
 import { exportFileName, fieldToGeoJson, ImportError, parseFieldFile } from '../../fields/importExport';
 import { useFields } from '../../fields/useFields';
 import { FieldsLayer, FitTo, HomeMarker, RobotMarker, TrackLayer } from '../../map/layers';
@@ -39,6 +41,7 @@ const newDraft = (source: FieldDraft['source'], boundary: LatLon[] = []): FieldD
 
 /** Manage Fields (spec 4.1): list, view, add (draw or record), edit, rename, delete. The home point is on the Settings page. */
 export function FieldsPage() {
+  const { units } = useDisplay();
   const link = useLinkState();
   const { fields, home, error, reload } = useFields();
   const recording = useTopic<RecordingStatus>(TOPICS.recordingStatus).message;
@@ -113,7 +116,7 @@ export function FieldsPage() {
           >
             <FieldThumb field={d} />
             <span className="field-name">{d.name}</span>
-            <span className="muted small">{formatArea(fields![i].area_m2)}</span>
+            <span className="muted small">{formatArea(fields![i].area_m2, units)}</span>
           </button>
         ))}
       </div>
@@ -263,6 +266,7 @@ function FieldDetails({
   onRenamed: () => void;
 }) {
   const robot = useRobot();
+  const { units, timeZone } = useDisplay();
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [renaming, setRenaming] = useState(false);
   const [newName, setNewName] = useState(field.name);
@@ -303,11 +307,11 @@ function FieldDetails({
       <dl className="readings">
         <div className="reading">
           <dt>Area</dt>
-          <dd>{formatArea(areaM2)}</dd>
+          <dd>{formatArea(areaM2, units)}</dd>
         </div>
         <div className="reading">
           <dt>Headland</dt>
-          <dd>{field.headlandWidthM.toFixed(1)} m</dd>
+          <dd>{formatLength(field.headlandWidthM, units)}</dd>
         </div>
         <div className="reading">
           <dt>Keep-out zones</dt>
@@ -319,11 +323,11 @@ function FieldDetails({
         </div>
         <div className="reading">
           <dt>Created</dt>
-          <dd>{formatDate(created)}</dd>
+          <dd>{formatDate(created, timeZone)}</dd>
         </div>
         <div className="reading">
           <dt>Changed</dt>
-          <dd>{formatDate(modified)}</dd>
+          <dd>{formatDate(modified, timeZone)}</dd>
         </div>
         {field.notes && (
           <div className="reading">

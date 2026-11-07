@@ -22,6 +22,8 @@ from dataclasses import dataclass, field
 
 from .fields import Field
 from .geo import XY, LocalProjection, point_in_ring, segments_intersect
+from .settings import UNITS_METRIC, UNITS_US
+from .units import format_flow, format_speed
 
 SWATH, TURN = 0, 1
 
@@ -50,8 +52,10 @@ class RobotLimits:
     # Nav2's xy_goal_tolerance. Swaths are extended past their ends by this much plus a margin, so
     # the controller doesn't stop short of the end of a row.
     goal_tolerance_m: float = 1.5
-    # Speed used to estimate trips home to refill.
+    # Transit speed (Settings page), to estimate trips home to refill.
     travel_speed_mps: float = 0.3
+    # Turn speed (Settings page), to estimate the time spent turning between rows.
+    turn_speed_mps: float = 0.3
     # Row directions tried when choosing the best one, besides the outline's own edge directions.
     angle_step_deg: float = 1.0
 
@@ -91,7 +95,7 @@ def max_speed_for_pump(rate_l_per_m2: float, boom_width_m: float, pump_max_l_min
     return pump_max_l_min * 60.0 / (rate_l_per_m2 * boom_width_m * 1000.0)
 
 
-def check_settings(s: SpraySettings, limits: RobotLimits) -> None:
+def check_settings(s: SpraySettings, limits: RobotLimits, units: str = UNITS_METRIC) -> None:
     def positive(value: float, what: str):
         if not (math.isfinite(value) and value > 0):
             raise PlanError(f"Enter a {what} greater than zero.")
@@ -103,17 +107,18 @@ def check_settings(s: SpraySettings, limits: RobotLimits) -> None:
     if s.application_rate_l_per_m2 > 1.0:
         raise PlanError("The application rate looks too high: at most 1 L/m² (10,000 L/ha).")
     if s.boom_width_m > 10:
-        raise PlanError("The boom width can be at most 10 m.")
+        raise PlanError("The boom width can be at most 32.8 ft." if units == UNITS_US else "The boom width can be at most 10 m.")
     if s.speed_kmh > limits.max_speed_kmh + 1e-9:
-        raise PlanError(f"The robot's top speed is {limits.max_speed_kmh:.2f} km/h.")
+        raise PlanError(f"The robot's top speed is {format_speed(limits.max_speed_kmh, units)}.")
     if not s.auto_angle and not math.isfinite(s.row_angle_deg):
         raise PlanError("Enter a row direction, or choose Auto.")
     flow = flow_l_min(s.application_rate_l_per_m2, s.boom_width_m, s.speed_kmh)
     if flow > limits.pump_max_flow_l_min + 1e-9:
         top = max_speed_for_pump(s.application_rate_l_per_m2, s.boom_width_m, limits.pump_max_flow_l_min)
         raise PlanError(
-            f"That needs {flow:.1f} L/min but the pump gives at most {limits.pump_max_flow_l_min:.1f} L/min. "
-            f"Lower the speed to {math.floor(top * 100 + 1e-6) / 100:.2f} km/h or less."
+            f"That needs {format_flow(flow, units)} but the pump gives at most "
+            f"{format_flow(limits.pump_max_flow_l_min, units)}. "
+            f"Lower the speed to {format_speed(math.floor(top * 100 + 1e-6) / 100, units)} or less."
         )
 
 
@@ -321,8 +326,11 @@ def _route_cells(f2c, robot, swaths_by_cells, ring: list[XY], obstacles: _Obstac
     return _sections_from_states(states)
 
 
-def plan_coverage(fld: Field, s: SpraySettings, limits: RobotLimits, home: tuple[float, float] | None = None) -> CoveragePlan:
-    check_settings(s, limits)
+def plan_coverage(
+    fld: Field, s: SpraySettings, limits: RobotLimits, home: tuple[float, float] | None = None, units: str = UNITS_METRIC
+) -> CoveragePlan:
+    """units only changes the units in error messages."""
+    check_settings(s, limits, units)
     f2c = _f2c()
     proj = LocalProjection.around(fld.boundary)
     outer = [proj.to_xy(p) for p in fld.boundary]
@@ -386,7 +394,7 @@ def plan_coverage(fld: Field, s: SpraySettings, limits: RobotLimits, home: tuple
 
     flow = flow_l_min(s.application_rate_l_per_m2, width, s.speed_kmh)
     speed = s.speed_kmh / 3.6
-    duration = spray_len / speed + (path_len - spray_len) / limits.travel_speed_mps
+    duration = spray_len / speed + (path_len - spray_len) / limits.turn_speed_mps
     if refills:
         if home is None:
             warnings.append("Set the home point: the job needs refills.")

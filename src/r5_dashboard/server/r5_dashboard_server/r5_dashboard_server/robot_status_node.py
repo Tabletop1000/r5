@@ -6,12 +6,13 @@ Publishes  /r5/stats     (r5_dashboard_interfaces/RobotStats, 1 Hz)
 Services   /r5/stats/service_done  (std_srvs/Trigger)  record a completed service
            /r5/alerts/acknowledge  (r5_dashboard_interfaces/AcknowledgeAlert)
            /r5/settings/set        (r5_dashboard_interfaces/SetSettings)
-Reads      /odometry/local, /diagnostics_agg
+Reads      /odometry/local, /diagnostics_agg, /battery_state
 """
 
 from __future__ import annotations
 
 import json
+import math
 import time
 from pathlib import Path
 
@@ -20,6 +21,7 @@ import rclpy.executors
 from builtin_interfaces.msg import Time
 from diagnostic_msgs.msg import DiagnosticArray
 from nav_msgs.msg import Odometry
+from sensor_msgs.msg import BatteryState
 from rclpy.node import Node
 from rclpy.qos import DurabilityPolicy, QoSProfile
 from std_srvs.srv import Trigger
@@ -27,7 +29,8 @@ from std_srvs.srv import Trigger
 from r5_dashboard_interfaces.msg import Alert, AlertArray, JobStatus, RobotSettings, RobotStats
 from r5_dashboard_interfaces.srv import AcknowledgeAlert, SetSettings
 
-from .settings import LINK_LOST, SettingsError, SettingsStore, schema_json
+from .job import Episode
+from .settings import BATTERY_LOW, LINK_LOST, TOO_STEEP, SettingsError, SettingsStore, schema_json
 from .shutdown import init_without_signal_handlers
 from .stats import (
     ERROR,
@@ -46,7 +49,9 @@ NO_DIAGNOSTICS_ALERT = "robot:no_diagnostics"
 REFILL_ALERT = "job:refill"
 JOB_PROBLEM_ALERT = "job:problem"
 JOB_FAILED_ALERT = "job:failed"
-LINK_LOST_ALERT = "job:link_lost"
+BATTERY_ALERT = "robot:battery_low"
+# Alerts for a job that stopped or went home by itself and waits for Resume, by message start.
+JOB_WAITING_ALERTS = ((LINK_LOST, "job:link_lost"), (BATTERY_LOW, "job:battery_low"), (TOO_STEEP, "job:too_steep"))
 
 
 def to_time(seconds: float) -> Time:
@@ -84,6 +89,8 @@ class RobotStatusNode(Node):
         self.settings_pub = self.create_publisher(RobotSettings, "/r5/settings", latched)
         self.create_subscription(Odometry, "/odometry/local", self.on_odometry, 10)
         self.create_subscription(DiagnosticArray, "/diagnostics_agg", self.on_diagnostics, 10)
+        self.battery_episode = Episode(hold_s=10.0)  # the same rule as job_manager's
+        self.create_subscription(BatteryState, "/battery_state", self.on_battery, 10)
         self.create_subscription(JobStatus, "/r5/job/status", self.on_job, latched)
         self.create_service(Trigger, "/r5/stats/service_done", self.on_service_done)
         self.create_service(AcknowledgeAlert, "/r5/alerts/acknowledge", self.on_acknowledge)
@@ -118,13 +125,32 @@ class RobotStatusNode(Node):
         )
         paused_by_failure = msg.state == JobStatus.PAUSED and msg.message.startswith("Navigation failed")
         changed |= self.alerts.set_condition(JOB_PROBLEM_ALERT, paused_by_failure, ERROR, "Spray job", msg.message, now)
-        # Stopped or returned home by the "If the link is lost" setting, and waiting for Resume.
-        waiting_for_link = msg.state == JobStatus.PAUSED and msg.message.startswith(LINK_LOST)
-        changed |= self.alerts.set_condition(LINK_LOST_ALERT, waiting_for_link, WARNING, "Spray job", msg.message, now)
+        # Stopped or went home by itself (link loss, low battery, slope), and waiting for Resume.
+        for prefix, alert_id in JOB_WAITING_ALERTS:
+            waiting = msg.state == JobStatus.PAUSED and msg.message.startswith(prefix)
+            changed |= self.alerts.set_condition(alert_id, waiting, WARNING, "Spray job", msg.message, now)
         changed |= self.alerts.set_condition(
             JOB_FAILED_ALERT, msg.state == JobStatus.FAILED, ERROR, "Spray job", msg.message, now
         )
         if changed:
+            self.publish_alerts()
+
+    def on_battery(self, msg: BatteryState) -> None:
+        if not math.isfinite(msg.percentage):
+            return
+        percent = msg.percentage * 100
+        low = float(self.settings["low_battery_percent"])
+        was_low = self.battery_episode.active
+        self.battery_episode.update(percent < low, percent >= low + 5.0, time.monotonic())
+        if self.battery_episode.active != was_low:
+            self.alerts.set_condition(
+                BATTERY_ALERT,
+                self.battery_episode.active,
+                WARNING,
+                "Battery",
+                f"Battery low: {percent:.0f}% (the low level is {low:g}%). Charge it soon.",
+                time.time(),
+            )
             self.publish_alerts()
 
     def on_service_done(self, _request, response):

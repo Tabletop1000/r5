@@ -3,10 +3,14 @@ import { Card, Reading, Readings } from '../../components/Card';
 import { ConfirmDialog } from '../../components/ConfirmDialog';
 import { useRobot, useTopic } from '../../ros/RobotContext';
 import { SERVICES, TOPICS, type RobotStats, type TriggerResponse } from '../../ros/topics';
-import { formatHours, formatKm, formatWhen, rosTimeToDate } from '../../robot/format';
+import { useDisplay } from '../../display/DisplayContext';
+import { formatWhen, rosTimeToDate } from '../../display/time';
+import { formatDistanceKm } from '../../display/units';
+import { formatHours } from '../../robot/format';
 
 /** Operating time, distance and the service schedule (spec RB-4). */
 export function UsageCard() {
+  const { units, timeZone } = useDisplay();
   const robot = useRobot();
   const stats = useTopic<RobotStats>(TOPICS.stats).message;
   const [confirming, setConfirming] = useState(false);
@@ -36,15 +40,15 @@ export function UsageCard() {
     >
       <Readings>
         <Reading label="Operating time" value={stats ? formatHours(stats.operating_hours) : null} />
-        <Reading label="Distance covered" value={stats ? formatKm(stats.distance_km) : null} />
+        <Reading label="Distance covered" value={stats ? formatDistanceKm(stats.distance_km, units) : null} />
         <Reading
           label="Next service"
           tone={serviceTone}
           value={
             stats
               ? stats.service_overdue
-                ? `Overdue by ${formatKm(-stats.km_to_service)}`
-                : `In ${formatKm(stats.km_to_service)}`
+                ? `Overdue by ${formatDistanceKm(-stats.km_to_service, units)}`
+                : `In ${formatDistanceKm(stats.km_to_service, units)}`
               : null
           }
         />
@@ -53,7 +57,7 @@ export function UsageCard() {
           value={
             stats
               ? stats.has_last_service
-                ? `${formatWhen(rosTimeToDate(stats.last_service_time))} at ${formatKm(stats.last_service_distance_km)}`
+                ? `${formatWhen(rosTimeToDate(stats.last_service_time), new Date(), timeZone)} at ${formatDistanceKm(stats.last_service_distance_km, units)}`
                 : 'None recorded'
               : null
           }
@@ -62,7 +66,7 @@ export function UsageCard() {
       {stats && (
         <div className={`meter tone-${serviceTone}`} role="meter" aria-label="Distance since last service" aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.round(used * 100)}>
           <div className="meter-fill" style={{ width: `${used * 100}%` }} />
-          <span className="meter-caption">Service every {stats.service_interval_km.toFixed(0)} km</span>
+          <span className="meter-caption">Service every {formatDistanceKm(stats.service_interval_km, units)}</span>
         </div>
       )}
       {note && <p className="note" role="status">{note}</p>}

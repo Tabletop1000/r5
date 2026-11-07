@@ -12,7 +12,9 @@ from __future__ import annotations
 
 import json
 import math
+import zoneinfo
 from dataclasses import dataclass
+from functools import lru_cache
 from pathlib import Path
 
 from .auth import write_private_file
@@ -24,8 +26,32 @@ COMMS_CONTINUE = "continue"
 COMMS_RETURN_HOME = "return_home"
 COMMS_DELAYED_RETURN_HOME = "delayed_return_home"
 COMMS_STOP = "stop"
-# job_manager starts its job status messages about link loss with this.
+
+BATTERY_WARN = "warn"
+BATTERY_RETURN_HOME = "return_home"
+BATTERY_STOP = "stop"
+
+UNITS_METRIC = "metric"
+UNITS_US = "us"
+
+DEVICE_TIME_ZONE = "device"
+
+# job_manager starts its job status messages with these when it stops or goes home by itself.
+# robot_status raises an alert for each while the job waits for Resume.
 LINK_LOST = "The link to the dashboard was lost"
+BATTERY_LOW = "The battery is low"
+TOO_STEEP = "The robot is on a slope steeper than the limit"
+
+
+@lru_cache(maxsize=1)
+def time_zone_choices() -> tuple[tuple[str, str], ...]:
+    """IANA time zones, as browsers know them, after "this device's time zone"."""
+    try:
+        zones = zoneinfo.available_timezones()
+    except Exception:  # noqa: BLE001 - no time zone database: offer only UTC
+        zones = set()
+    names = sorted(z for z in zones if "/" in z and not z.startswith(("Etc/", "SystemV/", "posix/", "right/")))
+    return ((DEVICE_TIME_ZONE, "This device's time zone"), ("UTC", "UTC"), *((z, z.replace("_", " ")) for z in names))
 
 
 @dataclass(frozen=True)
@@ -45,6 +71,9 @@ class Setting:
     choices: tuple[tuple[str, str], ...] = ()
     # (key, value): the page only shows this setting while that setting has that value.
     shown_when: tuple[str, str] | None = None
+    # "speed" for a value in km/h that the page shows in the chosen units. The value, minimum and
+    # maximum are always stored in km/h.
+    quantity: str = ""
 
     def to_json(self) -> dict:
         out = {
@@ -68,6 +97,8 @@ class Setting:
             out["choices"] = [{"value": v, "label": label} for v, label in self.choices]
         if self.shown_when:
             out["shown_when"] = {"key": self.shown_when[0], "value": self.shown_when[1]}
+        if self.quantity:
+            out["quantity"] = self.quantity
         return out
 
 
@@ -82,6 +113,24 @@ SETTINGS: tuple[Setting, ...] = (
         help="Shown at the top of the screen and next to the robot on the map.",
     ),
     Setting(
+        key="units",
+        label="Units",
+        group="Display",
+        kind="choice",
+        default=UNITS_METRIC,
+        choices=((UNITS_METRIC, "Metric (km/h, hectares, litres)"), (UNITS_US, "US (mph, acres, US gallons, feet)")),
+        help="For speeds, areas, volumes and distances on the dashboard. Sensor readings stay in SI units.",
+    ),
+    Setting(
+        key="time_zone",
+        label="Time zone",
+        group="Display",
+        kind="choice",
+        default=DEVICE_TIME_ZONE,
+        choices=time_zone_choices(),
+        help="For times and dates on the dashboard.",
+    ),
+    Setting(
         key="max_speed_kmh",
         label="Maximum speed",
         group="Driving",
@@ -91,7 +140,34 @@ SETTINGS: tuple[Setting, ...] = (
         minimum=0.1,
         maximum=HARDWARE_MAX_SPEED_KMH,
         step=0.01,
-        help="Top speed for spray jobs, including driving home. The Xbox controller has its own speeds.",
+        quantity="speed",
+        help="No part of a spray job goes faster than this. The Xbox controller has its own speeds.",
+    ),
+    Setting(
+        key="transit_speed_kmh",
+        label="Transit speed",
+        group="Driving",
+        kind="number",
+        default=HARDWARE_MAX_SPEED_KMH,
+        unit="km/h",
+        minimum=0.1,
+        maximum=HARDWARE_MAX_SPEED_KMH,
+        step=0.01,
+        quantity="speed",
+        help="Driving to the field, home and back, with the sprayer off. Never more than the maximum speed.",
+    ),
+    Setting(
+        key="turn_speed_kmh",
+        label="Turn speed",
+        group="Driving",
+        kind="number",
+        default=0.5,
+        unit="km/h",
+        minimum=0.1,
+        maximum=HARDWARE_MAX_SPEED_KMH,
+        step=0.01,
+        quantity="speed",
+        help="Turning between rows. Never more than the maximum speed.",
     ),
     Setting(
         key="comms_loss_action",
@@ -138,6 +214,50 @@ SETTINGS: tuple[Setting, ...] = (
         step=1.0,
         shown_when=("comms_loss_action", COMMS_DELAYED_RETURN_HOME),
         help="How long the robot keeps working without a link before it drives home.",
+    ),
+    Setting(
+        key="low_battery_action",
+        label="If the battery is low",
+        group="Battery",
+        kind="choice",
+        default=BATTERY_RETURN_HOME,
+        choices=(
+            (BATTERY_WARN, "Only warn"),
+            (BATTERY_RETURN_HOME, "Return home"),
+            (BATTERY_STOP, "Stop and wait"),
+        ),
+        help=(
+            "What a running spray job does when the battery drops below the level below. There's "
+            "always an alert. Resume needs the battery above the level again. Nothing happens until "
+            "the robot reports its battery level."
+        ),
+    ),
+    Setting(
+        key="low_battery_percent",
+        label="Low battery level",
+        group="Battery",
+        kind="number",
+        default=20.0,
+        unit="%",
+        minimum=5.0,
+        maximum=80.0,
+        step=1.0,
+        help="Counts as low after 10 s below this, so a short dip under load doesn't.",
+    ),
+    Setting(
+        key="slope_limit_deg",
+        label="Slope limit",
+        group="Slope",
+        kind="number",
+        default=15.0,
+        unit="°",
+        minimum=5.0,
+        maximum=45.0,
+        step=1.0,
+        help=(
+            "A spray job stops if the robot tilts more than this for a second, from the IMU. After "
+            "Resume it doesn't stop again until it has been on level ground, so it can drive off."
+        ),
     ),
 )
 

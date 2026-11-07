@@ -2,13 +2,15 @@ import { useState } from 'react';
 import { Card } from '../../components/Card';
 import { useRobot, useTopic } from '../../ros/RobotContext';
 import { ALERT_SEVERITY, SERVICES, TOPICS, type Alert, type AlertArray, type TriggerResponse } from '../../ros/topics';
-import { formatWhen, rosTimeToDate } from '../../robot/format';
+import { useDisplay } from '../../display/DisplayContext';
+import { formatWhen, rosTimeToDate } from '../../display/time';
 
 const SEVERITY_LABEL: Record<number, string> = { 0: 'Info', 1: 'Warning', 2: 'Error' };
 const SEVERITY_TONE: Record<number, string> = { 0: 'neutral', 1: 'warn', 2: 'bad' };
 
 /** Active alerts with severity, message and start time; each can be acknowledged (spec RB-2). */
 export function AlertsCard() {
+  const { timeZone } = useDisplay();
   const robot = useRobot();
   const msg = useTopic<AlertArray>(TOPICS.alerts).message;
   const [error, setError] = useState<string | null>(null);
@@ -36,7 +38,7 @@ export function AlertsCard() {
               <span className="badge">{SEVERITY_LABEL[a.severity] ?? 'Alert'}</span>
               <div className="alert-text">
                 <strong>{a.source}</strong> {a.message}
-                <div className="muted small">Since {formatWhen(rosTimeToDate(a.since))}</div>
+                <div className="muted small">Since {formatWhen(rosTimeToDate(a.since), new Date(), timeZone)}</div>
               </div>
               {a.severity > ALERT_SEVERITY.INFO &&
                 (a.acknowledged ? (

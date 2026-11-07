@@ -1,11 +1,13 @@
 import { useEffect, useRef, useState } from 'react';
 import { Card } from '../../components/Card';
+import { useDisplay } from '../../display/DisplayContext';
 import { ConfirmDialog } from '../../components/ConfirmDialog';
 import { useFields } from '../../fields/useFields';
 import { useLinkState, useRobot, useTopic } from '../../ros/RobotContext';
 import { SERVICES, TOPICS, type LatLon, type NavSatFix, type TriggerResponse } from '../../ros/topics';
 import {
   changedSettings,
+  displayUnit,
   formFromValues,
   groupSettings,
   isShown,
@@ -36,7 +38,8 @@ function SettingsForm({ settings }: { settings: RobotSettings }) {
   const robot = useRobot();
   const link = useLinkState();
   const { schema, values } = settings;
-  const [form, setForm] = useState<SettingsForm>(() => formFromValues(schema, values));
+  const { units } = useDisplay();
+  const [form, setForm] = useState<SettingsForm>(() => formFromValues(schema, values, units));
   const [edited, setEdited] = useState(false);
   const [saving, setSaving] = useState(false);
   const [note, setNote] = useState<string | null>(null);
@@ -47,10 +50,10 @@ function SettingsForm({ settings }: { settings: RobotSettings }) {
   const editedRef = useRef(edited);
   editedRef.current = edited;
   useEffect(() => {
-    if (!editedRef.current) setForm(formFromValues(schema, values));
-  }, [schema, values]);
+    if (!editedRef.current) setForm(formFromValues(schema, values, units));
+  }, [schema, values, units]);
 
-  const { changes, errors } = changedSettings(schema, values, form);
+  const { changes, errors } = changedSettings(schema, values, form, units);
   const changeCount = Object.keys(changes).length;
   const hasErrors = Object.keys(errors).length > 0;
 
@@ -81,7 +84,7 @@ function SettingsForm({ settings }: { settings: RobotSettings }) {
   }
 
   function discard() {
-    setForm(formFromValues(schema, values));
+    setForm(formFromValues(schema, values, units));
     setEdited(false);
     setError(null);
   }
@@ -98,7 +101,7 @@ function SettingsForm({ settings }: { settings: RobotSettings }) {
         <Card key={group} title={group}>
           <div className="form">
             {items.filter((s) => isShown(s, form)).map((s) => (
-              <SettingInput key={s.key} setting={s} text={form[s.key] ?? ''} error={errors[s.key]} onChange={(t) => set(s.key, t)} />
+              <SettingInput key={s.key} setting={s} unit={displayUnit(s, units)} text={form[s.key] ?? ''} error={errors[s.key]} onChange={(t) => set(s.key, t)} />
             ))}
           </div>
         </Card>
@@ -119,7 +122,7 @@ function SettingsForm({ settings }: { settings: RobotSettings }) {
   );
 }
 
-function SettingInput({ setting: s, text, error, onChange }: { setting: SettingDescription; text: string; error?: string; onChange: (text: string) => void }) {
+function SettingInput({ setting: s, unit, text, error, onChange }: { setting: SettingDescription; unit: string; text: string; error?: string; onChange: (text: string) => void }) {
   const helpId = `setting-${s.key}-help`;
   const common = { 'aria-invalid': !!error, 'aria-describedby': helpId };
   let input;
@@ -136,8 +139,8 @@ function SettingInput({ setting: s, text, error, onChange }: { setting: SettingD
   } else if (s.kind === 'number') {
     input = (
       <span className="input-with-unit">
-        <input type="number" inputMode="decimal" min={s.minimum} max={s.maximum} step={s.step ?? 'any'} value={text} onChange={(e) => onChange(e.target.value)} {...common} />
-        {s.unit && <span className="unit">{s.unit}</span>}
+        <input type="number" inputMode="decimal" step={s.quantity ? 'any' : (s.step ?? 'any')} value={text} onChange={(e) => onChange(e.target.value)} {...common} />
+        {unit && <span className="unit">{unit}</span>}
       </span>
     );
   } else {

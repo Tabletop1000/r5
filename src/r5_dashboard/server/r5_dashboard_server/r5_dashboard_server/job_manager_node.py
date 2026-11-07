@@ -9,11 +9,14 @@ Publishes  /r5/job/status (JobStatus, latched, on change and 1 Hz)
            /mux/stop (TwistStamped zeros): twist_mux's top-priority input, held for 2 s on Stop
 Uses       Nav2 /follow_path and /navigate_to_pose; robot_localization /fromLL
 Reads      /fix, /navpvt (optional), /odometry/global, /odometry/local, /battery_state, /r5/alerts,
-           /r5/settings (max speed, link loss), /client_count (rosbridge: connected dashboards)
+           /r5/settings, /client_count (rosbridge: connected dashboards), /bno055/imu (tilt)
 
-The job runs here, on the robot. If no dashboard is connected for a while, it does what the
-"If the link is lost" setting says: carries on (spec AS-7), returns home, carries on for a while
-and then returns home, or stops. Returning home and stopping both wait for Resume.
+The job runs here, on the robot, at the speeds on the Settings page: spray speed on rows, turn
+speed between them and transit speed everywhere else. The robot also acts by itself when:
+- no dashboard is connected for a while: what "If the link is lost" says (spec AS-7)
+- the battery is low: what "If the battery is low" says
+- it tilts more than the slope limit: it stops
+Returning home and stopping both wait for Resume.
 """
 
 from __future__ import annotations
@@ -41,7 +44,7 @@ from rclpy.executors import MultiThreadedExecutor
 from rclpy.node import Node
 from rclpy.qos import DurabilityPolicy, QoSProfile, qos_profile_sensor_data
 from robot_localization.srv import FromLL
-from sensor_msgs.msg import BatteryState, NavSatFix
+from sensor_msgs.msg import BatteryState, Imu, NavSatFix
 from std_msgs.msg import Bool, Float32, Int32
 from std_srvs.srv import Trigger
 
@@ -52,10 +55,12 @@ from r5_dashboard_interfaces.srv import GetJobDefaults, PlanJob, ResumeJob, Star
 from .auth import write_private_file
 from .coverage import SWATH, PlanError, RobotLimits, SpraySettings, plan_coverage
 from .fields import FIX_NAMES, REQUIREMENTS, FieldStore, fix_quality
-from .job import Affine2D, Tank, along_track, angle_difference, extend_line, flow_for_speed, heading, sprayer_should_be_on
+from .job import Affine2D, Episode, Tank, along_track, angle_difference, extend_line, flow_for_speed, heading, sprayer_should_be_on, tilt_deg
 from .listener import Listener
-from .settings import COMMS_CONTINUE, COMMS_DELAYED_RETURN_HOME, COMMS_STOP, LINK_LOST, values_from_json
+from .settings import BATTERY_LOW, BATTERY_STOP, BATTERY_WARN, LINK_LOST, TOO_STEEP, values_from_json
+from .settings import COMMS_CONTINUE, COMMS_DELAYED_RETURN_HOME, COMMS_STOP
 from .settings import defaults as settings_defaults
+from .units import format_area, format_volume
 from .shutdown import init_without_signal_handlers
 
 try:  # Only on the real robot.
@@ -75,6 +80,14 @@ ACTIVE = {
 FRESH_S = 3.0
 # The states in which the robot is working, so a lost link calls for the link loss action.
 WORKING = {JobStatus.GOING_TO_START, JobStatus.SPRAYING, JobStatus.TURNING, JobStatus.RETURNING_TO_WORK}
+# The states in which the robot drives, so a slope stops it.
+MOVING = WORKING | {JobStatus.RETURNING_HOME}
+# The speed setting for each driving state. Everything else is transit.
+SPEED_FOR_STATE = {JobStatus.SPRAYING: "spray", JobStatus.TURNING: "turn"}
+# Battery percent above the low level at which it stops counting as low.
+BATTERY_MARGIN = 5.0
+# Degrees below the slope limit at which the robot counts as off the slope.
+SLOPE_MARGIN = 2.0
 
 
 class JobStopped(Exception):
@@ -179,6 +192,8 @@ class JobManagerNode(Node):
         sub(Odometry, "/odometry/global", self.on_global, 10)
         sub(Odometry, "/odometry/local", self.on_local, 10)
         sub(BatteryState, "/battery_state", self.on_battery, 10)
+        # Remapped to a 5 Hz copy in dashboard.launch.py.
+        sub(Imu, "/bno055/imu", self.on_imu, qos_profile_sensor_data)
         # rosbridge's count of connected clients. Browsers are its only clients, through the
         # dashboard server, which drops a browser that stops answering its pings for 10 s.
         sub(Int32, "/client_count", self.on_client_count, latched)
@@ -194,8 +209,20 @@ class JobManagerNode(Node):
         self.warned_loss = 0  # the loss the delayed return home has been announced for
         self.link_message = ""  # the job status message this node set about the loss
         self.home_requested = threading.Event()
+        # Why the robot is going home: (start of the messages, current action).
+        self.home_reason = (LINK_LOST, "Returning home: link lost")
         self.home_xy: tuple[float, float] | None = None  # in the map frame, while a job runs
-        self.job_speed_mps: float | None = None
+
+        # Low battery and slope (see check_battery, check_slope).
+        self.battery_episode = Episode(hold_s=10.0)
+        self.handled_battery = 0
+        self.tilt: float | None = None
+        self.slope_episode = Episode(hold_s=1.0)
+        self.handled_slope = 0
+
+        # Speeds while a job runs (see apply_speed).
+        self.spray_speed_mps: float | None = None
+        self.speed_kind: str | None = None
 
         self.create_service(GetJobDefaults, "/r5/job/defaults", self.on_defaults, callback_group=group)
         self.create_service(PlanJob, "/r5/job/plan", self.on_plan, callback_group=group)
@@ -218,7 +245,7 @@ class JobManagerNode(Node):
         self.stop_hold_until = 0.0
         self.create_timer(1.0, self.publish_status, callback_group=group)
         self.create_timer(0.1, self.hold_stop, callback_group=group)
-        self.create_timer(1.0, self.check_link, callback_group=group)
+        self.create_timer(1.0, self.check_safety, callback_group=group)
         self.publish_status()
         self.publish_sprayer(False, 0.0)
         self.get_logger().info(
@@ -244,6 +271,15 @@ class JobManagerNode(Node):
 
     def on_battery(self, msg: BatteryState) -> None:
         self.battery = msg.percentage * 100 if math.isfinite(msg.percentage) else None
+        if self.battery is not None:
+            low = float(self.robot_settings["low_battery_percent"])
+            self.battery_episode.update(self.battery < low, self.battery >= low + BATTERY_MARGIN, time.monotonic())
+
+    def on_imu(self, msg: Imu) -> None:
+        q = msg.orientation
+        self.tilt = tilt_deg(q.x, q.y, q.z, q.w)
+        limit = float(self.robot_settings["slope_limit_deg"])
+        self.slope_episode.update(self.tilt > limit, self.tilt < limit - SLOPE_MARGIN, time.monotonic())
 
     def on_alerts(self, msg: AlertArray) -> None:
         self.alert_errors = [f"{a.source}: {a.message}" for a in msg.alerts if a.severity >= 2]
@@ -257,19 +293,28 @@ class JobManagerNode(Node):
 
     def on_robot_settings(self, msg: RobotSettings) -> None:
         self.robot_settings = values_from_json(msg.values_json)
-        top = self.max_speed_kmh() / 3.6
-        if self.job_speed_mps is not None and self.job_speed_mps > top + 1e-6:
-            self.get_logger().info(f"Maximum speed lowered: running job slowed to {top * 3.6:.2f} km/h")
-            self.job_speed_mps = top
-            self.set_speed_limit(top)
+        kind = self.speed_kind
+        if kind is not None:  # a job is running: the speed settings apply at once
+            self.apply_speed(kind)
 
     def max_speed_kmh(self) -> float:
         return min(self.limits.max_speed_kmh, float(self.robot_settings["max_speed_kmh"]))
 
+    def setting_speed_mps(self, key: str) -> float:
+        """A speed setting in m/s, never above the maximum speed."""
+        return min(float(self.robot_settings[key]), self.max_speed_kmh()) / 3.6
+
     def current_limits(self) -> RobotLimits:
-        """The robot's limits, with the user's maximum speed setting applied."""
-        top = self.max_speed_kmh()
-        return replace(self.limits, max_speed_kmh=top, travel_speed_mps=min(self.limits.travel_speed_mps, top / 3.6))
+        """The robot's limits, with the speed settings applied."""
+        return replace(
+            self.limits,
+            max_speed_kmh=self.max_speed_kmh(),
+            travel_speed_mps=self.setting_speed_mps("transit_speed_kmh"),
+            turn_speed_mps=self.setting_speed_mps("turn_speed_kmh"),
+        )
+
+    def units(self) -> str:
+        return str(self.robot_settings["units"])
 
     def fix_quality(self) -> int:
         if self.fix is None or time.monotonic() - self.fix_stamp > FRESH_S:
@@ -320,13 +365,13 @@ class JobManagerNode(Node):
             raise PlanError("Choose a field.")
         home = self.store.get_home()
         limits = self.current_limits()
-        key = (fld.id, fld.modified_s, tuple(asdict(s).values()), home, tuple(asdict(limits).values()))
+        key = (fld.id, fld.modified_s, tuple(asdict(s).values()), home, tuple(asdict(limits).values()), self.units())
         with self.lock:
             cached = self.plan_cache.get(key)
         if cached is not None:
             return fld, cached
         started = time.monotonic()
-        plan = plan_coverage(fld, s, limits, home)
+        plan = plan_coverage(fld, s, limits, home, units=self.units())
         self.get_logger().info(f"Planned {fld.name}: {plan.swath_count} rows in {time.monotonic() - started:.1f} s")
         with self.lock:
             self.plan_cache = {k: v for k, v in list(self.plan_cache.items())[-7:]}
@@ -481,6 +526,13 @@ class JobManagerNode(Node):
         if state not in (JobStatus.PAUSED, JobStatus.WAITING_FOR_REFILL):
             response.success, response.message = False, "The job isn't paused."
             return response
+        with self.lock:
+            stopped_for_battery = self.status.message.startswith(BATTERY_LOW)
+        if stopped_for_battery and self.battery_episode.active:
+            above = float(self.robot_settings["low_battery_percent"]) + BATTERY_MARGIN
+            response.success = False
+            response.message = f"The battery is at {self.battery:.0f}%. Charge it above {above:.0f}% first."
+            return response
         self.resume_refilled = request.tank_refilled
         self.pause_requested.clear()
         self.resume_event.set()
@@ -523,6 +575,20 @@ class JobManagerNode(Node):
         self.sprayer_on = on
         self.spray_pub.publish(Bool(data=on))
         self.flow_pub.publish(Float32(data=float(flow if on else 0.0)))
+
+    def apply_speed(self, kind: str) -> None:
+        """Nav2's speed limit for this part of the job: "spray", "turn" or "transit"."""
+        spray = self.spray_speed_mps
+        if spray is None:
+            return
+        if kind == "spray":
+            mps = min(spray, self.max_speed_kmh() / 3.6)
+        elif kind == "turn":
+            mps = self.setting_speed_mps("turn_speed_kmh")
+        else:
+            mps = self.setting_speed_mps("transit_speed_kmh")
+        self.speed_kind = kind
+        self.set_speed_limit(mps)
 
     def set_speed_limit(self, mps: float) -> None:
         msg = SpeedLimit(percentage=False, speed_limit=float(mps))
@@ -588,7 +654,57 @@ class JobManagerNode(Node):
             self.status.sprayer_on = self.sprayer_on
             self.status_pub.publish(self.status)
 
-    # ---- Link loss ----
+    # ---- Link loss, low battery and slopes ----
+
+    def check_safety(self) -> None:
+        """Once a second."""
+        self.check_slope()
+        self.check_battery()
+        self.check_link()
+
+    def request_home(self, prefix: str, action: str) -> None:
+        self.home_reason = (prefix, action)
+        self.home_requested.set()
+        self.cancel_active_goal()
+
+    def request_stop(self, message: str) -> None:
+        """Pause the job by itself, with a message saying why."""
+        self.get_logger().warning(message)
+        self.set_status(message=message)
+        self.pause_requested.set()
+        self.cancel_active_goal()
+
+    def check_battery(self) -> None:
+        episode = self.battery_episode
+        if not episode.active or self.handled_battery == episode.number:
+            return
+        with self.lock:
+            working = self.status.state in WORKING
+        if not working:
+            return  # it counts once the job is working again, and Resume waits for a charge
+        self.handled_battery = episode.number
+        action = self.robot_settings["low_battery_action"]
+        percent = f"{self.battery:.0f}%" if self.battery is not None else "low"
+        if action == BATTERY_WARN:
+            self.get_logger().warning(f"{BATTERY_LOW} ({percent}). Carrying on, as set.")
+        elif action == BATTERY_STOP:
+            self.request_stop(f"{BATTERY_LOW} ({percent}), so the robot stopped. Charge it, then press Resume.")
+        else:
+            self.get_logger().warning(f"{BATTERY_LOW} ({percent}): returning home")
+            self.request_home(BATTERY_LOW, "Returning home: battery low")
+
+    def check_slope(self) -> None:
+        episode = self.slope_episode
+        if not episode.active or self.handled_slope == episode.number:
+            return
+        with self.lock:
+            moving = self.status.state in MOVING
+        if not moving:
+            return
+        self.handled_slope = episode.number
+        limit = float(self.robot_settings["slope_limit_deg"])
+        tilt = f"{self.tilt:.0f}°" if self.tilt is not None else "steep"
+        self.request_stop(f"{TOO_STEEP} ({tilt}, limit {limit:g}°), so it stopped. Check it's safe, then press Resume.")
 
     def check_link(self) -> None:
         """Once a second: take the link loss action if the link has been down long enough."""
@@ -623,31 +739,35 @@ class JobManagerNode(Node):
         self.handled_loss = loss
         if action == COMMS_STOP:
             self.link_message = f"{LINK_LOST}, so the robot stopped. Press Resume to carry on."
-            self.get_logger().warning(self.link_message)
-            self.set_status(message=self.link_message)
-            self.pause_requested.set()
+            self.request_stop(self.link_message)
         else:
             self.get_logger().warning(f"{LINK_LOST}: returning home")
-            self.home_requested.set()
-        self.cancel_active_goal()
+            self.request_home(LINK_LOST, "Returning home: link lost")
 
     def return_home_and_wait(self) -> None:
-        """Link loss: sprayer off, drive home, wait for Resume, then drive back to where it stopped.
+        """Link loss or low battery: sprayer off, drive home, wait for Resume, then drive back to
+        where it stopped.
 
         The interrupted goal is then sent again. Nav2 follows a path from the point nearest the
         robot, and the sprayer goes by position along the row, so nothing is sprayed twice.
         """
         self.home_requested.clear()
+        prefix, action = self.home_reason
+        then = "Charge it, then press Resume." if prefix == BATTERY_LOW else "Press Resume to carry on."
         self.publish_sprayer(False, 0.0)
         stopped_at, stopped_yaw = self.pose, self.yaw
         if self.home_xy is None or stopped_at is None:
-            self.link_message = f"{LINK_LOST}, but the robot can't drive home, so it stopped. Press Resume to carry on."
-            self.set_status(message=self.link_message)
+            message = f"{prefix}, but the robot can't drive home, so it stopped. {then}"
+            if prefix == LINK_LOST:
+                self.link_message = message
+            self.set_status(message=message)
             self.pause_requested.set()
             return
-        self.navigate_to(self.home_xy, 0.0, JobStatus.RETURNING_HOME, "Returning home: link lost", any_heading=True)
-        self.link_message = f"{LINK_LOST}, so the robot drove home. Press Resume to carry on."
-        self.set_status(message=self.link_message)
+        self.navigate_to(self.home_xy, 0.0, JobStatus.RETURNING_HOME, action, any_heading=True)
+        message = f"{prefix}, so the robot drove home. {then}"
+        if prefix == LINK_LOST:
+            self.link_message = message
+        self.set_status(message=message)
         self.pause_requested.set()
         self.check_pause(JobStatus.RETURNING_TO_WORK, "Returning to where the robot stopped")
         self.navigate_to(stopped_at, stopped_yaw, JobStatus.RETURNING_TO_WORK, "Returning to where the robot stopped")
@@ -684,8 +804,7 @@ class JobManagerNode(Node):
             home_ll = self.store.get_home()
             home = transform.apply(plan.projection.to_xy(home_ll)) if home_ll else None
             self.home_xy = home
-            self.job_speed_mps = speed_mps
-            self.set_speed_limit(speed_mps)
+            self.spray_speed_mps = speed_mps
 
             first = sections[0][1]
             self.navigate_to(first[0], heading(first[0], first[1]), JobStatus.GOING_TO_START, f"Going to the start of {fld.name}")
@@ -705,8 +824,12 @@ class JobManagerNode(Node):
                     pct = 100 * progress["done"] / total_spray
                     self.follow_section(pts, JobStatus.TURNING, f"Turning — {fld.name} {pct:.0f}%")
             area = plan.area_sprayed_m2
-            area_text = f"{area / 10_000:.2f} ha" if area >= 1000 else f"{area:.0f} m²"
-            self.finish(JobStatus.FINISHED, f"Finished {fld.name}", f"Sprayed {area_text} with {tank.used_total:.1f} L.")
+            units = self.units()
+            self.finish(
+                JobStatus.FINISHED,
+                f"Finished {fld.name}",
+                f"Sprayed {format_area(area, units)} with {format_volume(tank.used_total, units)}.",
+            )
         except JobStopped:
             with self.lock:
                 done = self.status.progress
@@ -717,7 +840,8 @@ class JobManagerNode(Node):
 
     def finish(self, state: int, action: str, message: str) -> None:
         self.publish_sprayer(False, 0.0)
-        self.job_speed_mps = None
+        self.spray_speed_mps = None
+        self.speed_kind = None
         self.home_requested.clear()
         self.set_speed_limit(0.0)  # 0 removes the limit
         self.publish_zero_velocity()
@@ -770,7 +894,7 @@ class JobManagerNode(Node):
             tank.use(flow, dt)
             done = progress["done"] + min(max(along, 0.0), length)
             remaining_spray = total - done
-            remaining_s = remaining_spray / (s.speed_kmh / 3.6) + max(0.0, plan.path_length_m - plan.spray_length_m) * (remaining_spray / total) / self.limits.travel_speed_mps
+            remaining_s = remaining_spray / (s.speed_kmh / 3.6) + max(0.0, plan.path_length_m - plan.spray_length_m) * (remaining_spray / total) / self.current_limits().turn_speed_mps
             self.set_status(
                 progress=done / total,
                 area_done_m2=done * s.boom_width_m,
@@ -811,6 +935,7 @@ class JobManagerNode(Node):
                 self.return_home_and_wait()
                 continue  # check_pause again: returning home may have ended in a pause
             self.set_status(state=state, current_action=action)
+            self.apply_speed(SPEED_FOR_STATE.get(state, "transit"))
             if not client.wait_for_server(timeout_sec=5.0):
                 raise RuntimeError("Nav2 isn't running")
             handle = self.wait_future(client.send_goal_async(goal), 10.0)

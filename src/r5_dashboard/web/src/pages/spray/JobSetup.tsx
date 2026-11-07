@@ -1,7 +1,9 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Card } from '../../components/Card';
 import { ConfirmDialog } from '../../components/ConfirmDialog';
-import { draftFromMsg, formatArea } from '../../fields/geo';
+import { useDisplay } from '../../display/DisplayContext';
+import { formatArea, formatDistanceKm, formatFlow, formatRate, formatSpeed, formatVolume, length, rate as rateUnits, speed as speedUnits, volume } from '../../display/units';
+import { draftFromMsg } from '../../fields/geo';
 import { useFields } from '../../fields/useFields';
 import { FieldsLayer, FitTo, HomeMarker, RobotMarker } from '../../map/layers';
 import { MapView } from '../../map/MapView';
@@ -28,6 +30,7 @@ function fieldFromHash(): string {
 export function JobSetup() {
   const robot = useRobot();
   const link = useLinkState();
+  const { units } = useDisplay();
   const { fields, home } = useFields();
   const [fieldId, setFieldId] = useState(fieldFromHash);
   const [form, setForm] = useState<SettingsForm | null>(null);
@@ -42,7 +45,16 @@ export function JobSetup() {
 
   const field = fields?.find((f) => f.id === fieldId) ?? null;
   const draft = useMemo(() => (field ? draftFromMsg(field) : null), [field]);
-  const formCheck = form ? checkForm(form, limits) : null;
+  const formCheck = form ? checkForm(form, limits, units) : null;
+
+  // The form holds numbers in the display units: convert it if the units are changed meanwhile.
+  const formUnits = useRef(units);
+  useEffect(() => {
+    if (formUnits.current === units) return;
+    const from = formUnits.current;
+    formUnits.current = units;
+    setForm((f) => (f ? formFromSettings(settingsFromForm('', f, from), units) : f));
+  }, [units]);
   const formOk = formCheck !== null && Object.keys(formCheck.errors).length === 0;
 
   // Starting values: the field's last-used settings, or the robot's defaults (spec AS-2).
@@ -54,7 +66,7 @@ export function JobSetup() {
       .callService<{ field_id: string }, JobDefaultsResponse>(SERVICES.jobDefaults, { field_id: fieldId })
       .then((d) => {
         if (cancelled) return;
-        setForm(formFromSettings(d.settings));
+        setForm(formFromSettings(d.settings, formUnits.current));
         setLimits({ maxSpeedKmh: d.max_speed_kmh, pumpMaxLMin: d.pump_max_flow_l_min });
       })
       .catch((err: Error) => !cancelled && setError(`Couldn't load settings: ${err.message}`));
@@ -70,7 +82,7 @@ export function JobSetup() {
     const timer = setTimeout(() => {
       setPlanning(true);
       robot
-        .callService<{ settings: unknown }, PlanJobResponse>(SERVICES.planJob, { settings: settingsFromForm(fieldId, form) }, 15000)
+        .callService<{ settings: unknown }, PlanJobResponse>(SERVICES.planJob, { settings: settingsFromForm(fieldId, form, units) }, 15000)
         .then((r) => {
           if (no !== requestNo.current) return;
           setPlanResult(r);
@@ -80,7 +92,7 @@ export function JobSetup() {
         .finally(() => no === requestNo.current && setPlanning(false));
     }, PLAN_DELAY_MS);
     return () => clearTimeout(timer);
-  }, [robot, fieldId, form, formOk, link.status]);
+  }, [robot, fieldId, form, formOk, link.status, units]);
 
   async function start() {
     if (!form) return;
@@ -89,7 +101,7 @@ export function JobSetup() {
     try {
       const r = await robot.callService<{ settings: unknown; tank_full_confirmed: boolean }, StartJobResponse>(
         SERVICES.startJob,
-        { settings: settingsFromForm(fieldId, form), tank_full_confirmed: tankFull },
+        { settings: settingsFromForm(fieldId, form, units), tank_full_confirmed: tankFull },
         15000,
       );
       if (!r.success) {
@@ -112,7 +124,7 @@ export function JobSetup() {
   const ready = !!plan && !!planResult?.ready && formOk && link.status === 'connected' && !planning;
   const set = (patch: Partial<SettingsForm>) => form && setForm({ ...form, ...patch });
   const err = formCheck?.errors ?? {};
-  const rateNum = form ? Number(form.rate) : NaN;
+  const rateLPerM2 = form ? rateUnits.toLPerM2(Number(form.rate), units) : NaN;
 
   return (
     <div className="fields-layout">
@@ -125,7 +137,7 @@ export function JobSetup() {
                 <option value="">Choose a field…</option>
                 {(fields ?? []).map((f) => (
                   <option key={f.id} value={f.id}>
-                    {f.name} ({formatArea(f.area_m2)})
+                    {f.name} ({formatArea(f.area_m2, units)})
                   </option>
                 ))}
               </select>
@@ -133,17 +145,17 @@ export function JobSetup() {
             {fields && fields.length === 0 && <p className="muted small">No fields yet. Add one on the Manage Fields page.</p>}
             {form && field && (
               <>
-                <NumberInput label="Application rate (L/m²)" value={form.rate} step="0.001" error={err.rate} onChange={(v) => set({ rate: v })}
-                  hint={rateNum > 0 ? `= ${Math.round(rateNum * 10_000).toLocaleString()} L/ha` : undefined} />
-                <NumberInput label="Boom width (m)" value={form.boom} step="0.1" error={err.boom} onChange={(v) => set({ boom: v })} hint="Also the spacing between rows." />
-                <NumberInput label="Travel speed (km/h)" value={form.speed} step="0.05" error={err.speed} onChange={(v) => set({ speed: v })}
-                  hint={limits ? `Top speed ${limits.maxSpeedKmh.toFixed(2)} km/h` : undefined} />
+                <NumberInput label={`Application rate (${rateUnits.unit(units)})`} value={form.rate} step={units === 'us' ? '0.1' : '0.001'} error={err.rate} onChange={(v) => set({ rate: v })}
+                  hint={rateLPerM2 > 0 && units === 'metric' ? `= ${Math.round(rateLPerM2 * 10_000).toLocaleString()} L/ha` : undefined} />
+                <NumberInput label={`Boom width (${length.unit(units)})`} value={form.boom} step="0.1" error={err.boom} onChange={(v) => set({ boom: v })} hint="Also the spacing between rows." />
+                <NumberInput label={`Spray speed (${speedUnits.unit(units)})`} value={form.speed} step="0.05" error={err.speed} onChange={(v) => set({ speed: v })}
+                  hint={limits ? `Top speed ${formatSpeed(limits.maxSpeedKmh, units)}. Turns and transit use the speeds on the Settings page.` : undefined} />
                 {formCheck?.suggestedSpeed !== null && formCheck?.suggestedSpeed !== undefined && (
                   <button type="button" className="secondary small" onClick={() => set({ speed: String(formCheck.suggestedSpeed) })}>
-                    Use {formCheck.suggestedSpeed.toFixed(2)} km/h
+                    Use {formCheck.suggestedSpeed.toFixed(2)} {speedUnits.unit(units)}
                   </button>
                 )}
-                <NumberInput label="Tank capacity (L)" value={form.tank} step="1" error={err.tank} onChange={(v) => set({ tank: v })} />
+                <NumberInput label={`Tank capacity (${volume.unit(units)})`} value={form.tank} step="1" error={err.tank} onChange={(v) => set({ tank: v })} />
                 <div>
                   <span className="label-text">Row direction</span>
                   <label className="inline">
@@ -155,8 +167,8 @@ export function JobSetup() {
                 </div>
                 <div className="reading-row">
                   <span>Flow rate</span>
-                  <strong>{formCheck?.flow !== null && formCheck?.flow !== undefined ? `${formCheck.flow.toFixed(2)} L/min` : '—'}</strong>
-                  {limits && <span className="muted small">pump max {limits.pumpMaxLMin.toFixed(1)} L/min</span>}
+                  <strong>{formCheck?.flow !== null && formCheck?.flow !== undefined ? formatFlow(formCheck.flow, units) : '—'}</strong>
+                  {limits && <span className="muted small">pump max {formatFlow(limits.pumpMaxLMin, units)}</span>}
                 </div>
               </>
             )}
@@ -170,11 +182,11 @@ export function JobSetup() {
             {plan && (
               <>
                 <dl className="readings">
-                  <Row label="Area sprayed" value={formatArea(plan.area_sprayed_m2)} />
+                  <Row label="Area sprayed" value={formatArea(plan.area_sprayed_m2, units)} />
                   <Row label="Rows" value={`${plan.swath_count}, ${Math.round(plan.row_angle_deg)}° from north`} />
-                  <Row label="Path length" value={`${(plan.path_length_m / 1000).toFixed(2)} km`} />
+                  <Row label="Path length" value={formatDistanceKm(plan.path_length_m / 1000, units)} />
                   <Row label="Estimated time" value={formatDuration(plan.duration_s)} />
-                  <Row label="Liquid needed" value={`${plan.liquid_needed_l.toFixed(1)} L`} />
+                  <Row label="Liquid needed" value={formatVolume(plan.liquid_needed_l, units)} />
                   <Row label="Refills" value={plan.refills === 0 ? 'None' : `${plan.refills} (the robot returns home each time; included in the time)`} />
                 </dl>
                 <p className="muted small">The headland isn't sprayed.</p>
@@ -221,13 +233,13 @@ export function JobSetup() {
         {plan && form && (
           <>
             <p>
-              The robot will drive to the start of the field and spray {formatArea(plan.area_sprayed_m2)} at {Number(form.rate).toFixed(3)} L/m²,
-              using about {plan.liquid_needed_l.toFixed(1)} L over {formatDuration(plan.duration_s)}
+              The robot will drive to the start of the field and spray {formatArea(plan.area_sprayed_m2, units)} at {formatRate(rateLPerM2, units)},
+              using about {formatVolume(plan.liquid_needed_l, units)} over {formatDuration(plan.duration_s)}
               {plan.refills > 0 && `, coming home ${plan.refills} time${plan.refills > 1 ? 's' : ''} to refill`}.
             </p>
             <p><strong>Make sure the area is clear of people and animals.</strong></p>
             <label className="inline confirm-check">
-              <input type="checkbox" checked={tankFull} onChange={(e) => setTankFull(e.target.checked)} /> The tank is full ({Number(form.tank)} L)
+              <input type="checkbox" checked={tankFull} onChange={(e) => setTankFull(e.target.checked)} /> The tank is full ({Number(form.tank)} {volume.unit(units)})
             </label>
             {!tankFull && <p className="muted small">Tick to confirm. There is no tank sensor yet, so the robot counts from full.</p>}
           </>

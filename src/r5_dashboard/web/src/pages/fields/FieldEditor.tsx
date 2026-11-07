@@ -1,6 +1,8 @@
 import { useCallback, useMemo, useRef, useState } from 'react';
 import { ConfirmDialog } from '../../components/ConfirmDialog';
-import { checkField, formatArea, MAX_HEADLAND_M, msgFromDraft, draftFromMsg, type FieldDraft } from '../../fields/geo';
+import { useDisplay } from '../../display/DisplayContext';
+import { formatArea, inputNumber, length } from '../../display/units';
+import { checkField, MAX_HEADLAND_M, msgFromDraft, draftFromMsg, type FieldDraft } from '../../fields/geo';
 import { DrawLayer, type DrawApi, type DrawShapes, type Role } from '../../map/DrawLayer';
 import { FieldsLayer, FitTo, HomeMarker, RobotMarker, TrackLayer } from '../../map/layers';
 import { MapView } from '../../map/MapView';
@@ -38,7 +40,16 @@ export function FieldEditor({ initial, otherNames, startAt, home, fromRecording,
 
   const initialShapes = useMemo<DrawShapes>(() => ({ boundary: initial.boundary, keepOut: initial.keepOut }), [initial]);
   const onShapes = useCallback((s: DrawShapes) => setDraft((d) => ({ ...d, boundary: s.boundary, keepOut: s.keepOut })), []);
-  const check = checkField(draft, otherNames);
+  const { units } = useDisplay();
+  const check = checkField(draft, otherNames, units);
+  // The headland input holds what was typed, in the display units; the draft keeps metres.
+  const headlandText = (m: number) => (Number.isFinite(m) ? inputNumber(length.fromM(m, units), 2) : '');
+  const [headland, setHeadland] = useState(() => headlandText(draft.headlandWidthM));
+  const headlandUnits = useRef(units);
+  if (headlandUnits.current !== units) {
+    headlandUnits.current = units;
+    setHeadland(headlandText(draft.headlandWidthM));
+  }
   const isNew = !draft.id;
   const changed = JSON.stringify(draft) !== JSON.stringify(initial) || (isNew && initial.source === 'imported');
 
@@ -95,14 +106,17 @@ export function FieldEditor({ initial, otherNames, startAt, home, fromRecording,
               <input value={draft.name} maxLength={60} onChange={(e) => setDraft({ ...draft, name: e.target.value })} autoFocus={!isNew} />
             </label>
             <label>
-              Headland width (m)
+              Headland width ({length.unit(units)})
               <input
                 type="number"
                 min={0}
-                max={MAX_HEADLAND_M}
+                max={Number(length.fromM(MAX_HEADLAND_M, units).toFixed(1))}
                 step={0.1}
-                value={Number.isFinite(draft.headlandWidthM) ? draft.headlandWidthM : ''}
-                onChange={(e) => setDraft({ ...draft, headlandWidthM: e.target.value === '' ? NaN : Number(e.target.value) })}
+                value={headland}
+                onChange={(e) => {
+                  setHeadland(e.target.value);
+                  setDraft({ ...draft, headlandWidthM: e.target.value === '' ? NaN : length.toM(Number(e.target.value), units) });
+                }}
               />
               <span className="muted small">The strip inside the boundary where the robot turns. Shown in amber; it isn't sprayed.</span>
             </label>
@@ -168,7 +182,7 @@ export function FieldEditor({ initial, otherNames, startAt, home, fromRecording,
             )}
 
             <div className="field-summary">
-              <span>Area: {check.areaM2 ? formatArea(check.areaM2) : '—'}</span>
+              <span>Area: {check.areaM2 ? formatArea(check.areaM2, units) : '—'}</span>
               <span>Keep-out zones: {draft.keepOut.length}</span>
             </div>
             {notices?.map((n) => (

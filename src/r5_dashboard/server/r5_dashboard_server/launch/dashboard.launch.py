@@ -24,7 +24,8 @@ THROTTLED = [
     # job_manager checks the robot's position along a row at 10 Hz.
     ("/odometry/global", "/r5/dashboard/odometry/global", 10.0),
 ]
-ODOMETRY_REMAPS = [(topic, copy) for topic, copy, _ in THROTTLED if topic.startswith("/odometry/")]
+# The dashboard nodes read the copies. job_manager reads the IMU for the slope limit.
+REMAPS = [(topic, copy) for topic, copy, _ in THROTTLED]
 
 
 def generate_launch_description():
@@ -110,7 +111,7 @@ def generate_launch_description():
         output="both",
         # Operating time and alert times use the wall clock even in simulation.
         parameters=[{"data_dir": data_dir}],
-        remappings=ODOMETRY_REMAPS,
+        remappings=REMAPS,
     )
 
     # Wheel geometry and joint names match r5's diffbot_controllers.yaml. Commands go through
@@ -120,7 +121,7 @@ def generate_launch_description():
         executable="motor_test",
         output="both",
         parameters=[{"use_sim_time": use_sim_time, "cmd_vel_topic": "/mux/test"}],
-        remappings=ODOMETRY_REMAPS,
+        remappings=REMAPS,
     )
 
     field_manager = Node(
@@ -138,7 +139,7 @@ def generate_launch_description():
         output="both",
         # Wheel and sprayer values are placeholders until the sprayer is built (spec 5.5).
         parameters=[{"data_dir": data_dir, "job_fix_requirement": fix_requirement, "use_sim_time": use_sim_time}],
-        remappings=ODOMETRY_REMAPS,
+        remappings=REMAPS,
     )
 
     sprayer_stub = Node(

@@ -1,3 +1,5 @@
+import { useDisplay } from '../../display/DisplayContext';
+import { formatLength } from '../../display/units';
 import { useState } from 'react';
 import { useRobot } from '../../ros/RobotContext';
 import { RECORDING_STATE, SERVICES, type LatLon, type RecordingStatus, type TriggerResponse } from '../../ros/topics';
@@ -17,6 +19,7 @@ interface ControlsProps {
  * started from the controller.
  */
 export function RecordingControls({ status, purpose, useLabel, onUse, onDiscarded }: ControlsProps) {
+  const { units } = useDisplay();
   const robot = useRobot();
   const [error, setError] = useState<string | null>(null);
 
@@ -43,7 +46,7 @@ export function RecordingControls({ status, purpose, useLabel, onUse, onDiscarde
           </p>
           <ul className="recording-stats">
             <li>
-              {status.points.length} positions · {status.length_m.toFixed(1)} m driven
+              {status.points.length} positions · {formatLength(status.length_m, units)} driven
             </li>
             <li className={fixOk ? undefined : 'warn-text'}>
               GPS: {status.current_fix} (needs {status.required_fix} or better)

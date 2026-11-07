@@ -66,7 +66,9 @@ describe('checkField (mirrors the robot, spec FM-6)', () => {
   it('warns, without blocking, about unusual sizes', () => {
     const small = checkField(draft({ boundary: ll([[0, 0], [20, 0], [20, 20], [0, 20]]) }), []);
     expect(small.errors).toEqual([]);
-    expect(small.warnings[0]).toMatch('0.1–3 ha');
+    expect(small.warnings[0]).toMatch('0.10 ha to 3.00 ha');
+    const us = checkField(draft({ boundary: ll([[0, 0], [20, 0], [20, 20], [0, 20]]) }), [], 'us');
+    expect(us.warnings[0]).toMatch('0.25 acres to 7.41 acres');
   });
 });
 

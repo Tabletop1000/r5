@@ -133,3 +133,17 @@ def test_turns_and_joins_stay_in_field_and_out_of_keep_outs(zones):
                 assert not point_in_ring(p, z), f"{sec.kind} enters a keep-out at {p}"
     # Every row of every cell is driven exactly once.
     assert plan.swath_count == sum(1 for s in plan.sections if s.kind == SWATH)
+
+
+def test_turns_are_timed_at_the_turn_speed():
+    slow = plan_coverage(field(), settings(), RobotLimits(turn_speed_mps=0.1))
+    fast = plan_coverage(field(), settings(), RobotLimits(turn_speed_mps=0.3))
+    turning_m = slow.path_length_m - slow.spray_length_m
+    assert slow.duration_s - fast.duration_s == pytest.approx(turning_m / 0.1 - turning_m / 0.3)
+
+
+def test_errors_use_the_chosen_units():
+    with pytest.raises(PlanError, match=r"0\.62 mph"):
+        plan_coverage(field(), settings(speed_kmh=1.05), RobotLimits(max_speed_kmh=1.0), units="us")
+    with pytest.raises(PlanError, match=r"gal/min"):
+        plan_coverage(field(), settings(application_rate_l_per_m2=0.2), RobotLimits(pump_max_flow_l_min=2.5), units="us")

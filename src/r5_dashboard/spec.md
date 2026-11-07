@@ -189,6 +189,12 @@ tank capacity and flow rate, and an **Upload** button.
     tank when starting and resuming.
   - Trips home use Nav2 normal navigation, outside the field's coverage path. The path between fields
     and home must be clear; obstacles there are not mapped in v1.
+- **AS-10 Speeds.** Rows are sprayed at the job's speed. Turns between rows and driving to the
+  field, home and back use the turn and transit speeds on the Settings page. None goes above the
+  maximum speed setting.
+- **AS-11 Low battery and slopes.** A running job warns, returns home or stops when the battery is
+  low, as set on the Settings page, and stops when the robot tilts more than the slope limit. Both
+  raise an alert and wait for Resume.
 
 #### Spot Spray
 
