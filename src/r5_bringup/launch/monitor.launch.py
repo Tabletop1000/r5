@@ -10,7 +10,7 @@ from launch_ros.substitutions import FindPackageShare
 def generate_launch_description():
     system_monitor_node = Node(
         package="r5_monitor",
-        executable="system_monitor.py",
+        executable="system_monitor",
         output="both",
     )
     aggregator_node = Node(

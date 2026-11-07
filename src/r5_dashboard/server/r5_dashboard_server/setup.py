@@ -46,7 +46,6 @@ setup(
             "motor_test = r5_dashboard_server.motor_test_node:main",
             "field_manager = r5_dashboard_server.field_manager_node:main",
             "job_manager = r5_dashboard_server.job_manager_node:main",
-            "sprayer_stub = r5_dashboard_server.sprayer_stub_node:main",
         ],
     },
 )

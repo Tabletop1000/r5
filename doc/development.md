@@ -12,7 +12,7 @@ doesn't need installing on the host.
 | `src/r5_sensors` | The BNO055 IMU driver (C++), and config and launch files for the IMU and u-blox GPS |
 | `src/r5_localisation` | Dual EKF localisation. See its [README](../src/r5_localisation/README.md). |
 | `src/r5_navigation` | Nav2 configuration and launch files |
-| `src/r5_monitor` | Computer temperature, WiFi signal and versions, for the dashboard |
+| `src/r5_monitor` | `system_monitor` (C++): computer temperature, WiFi signal and versions, for the dashboard |
 | `src/r5_dashboard` | The operator dashboard: web app, server and its ROS nodes. See its [README](../src/r5_dashboard/README.md). |
 | `src/r5_simulation` | Gazebo world and launch file, for the laptop only |
 | `src/r5_bringup` | `r5.launch.py`, which starts everything on the robot, plus the velocity command switch, Xbox controller and diagnostics |

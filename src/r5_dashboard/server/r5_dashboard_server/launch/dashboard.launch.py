@@ -1,7 +1,7 @@
 """Start rosbridge (localhost only), the dashboard server in front of it (spec D7), and the
 robot-side nodes the dashboard uses: robot_status (usage, service schedule, alerts), motor_test,
 field_manager (fields, home point, boundary recording), job_manager (spray jobs), and a container
-of C++ components (topic throttles and the /r5/ping service).
+of C++ components: topic throttles, the /r5/ping service and the optional sprayer_stub.
 
 On the simulator, pass use_sim_time:=true fix_requirement:=any sprayer_stub:=true.
 """
@@ -116,6 +116,13 @@ def generate_launch_description():
         + [
             # Answers at once; the web app uses it for the round-trip time and the link check.
             ComposableNode(package="r5_dashboard_nodes", plugin="r5_dashboard::Ping", name="ping"),
+            # Logs sprayer commands, until the sprayer exists.
+            ComposableNode(
+                package="r5_dashboard_nodes",
+                plugin="r5_dashboard::SprayerStub",
+                name="sprayer_stub",
+                condition=IfCondition(LaunchConfiguration("sprayer_stub")),
+            ),
         ],
     )
 
@@ -156,14 +163,7 @@ def generate_launch_description():
         remappings=REMAPS,
     )
 
-    sprayer_stub = Node(
-        package="r5_dashboard_server",
-        executable="sprayer_stub",
-        output="both",
-        condition=IfCondition(LaunchConfiguration("sprayer_stub")),
-    )
-
     return LaunchDescription(
         arguments
-        + [rosbridge, server, components, robot_status, motor_test, field_manager, job_manager, sprayer_stub]
+        + [rosbridge, server, components, robot_status, motor_test, field_manager, job_manager]
     )
