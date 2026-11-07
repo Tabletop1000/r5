@@ -1,18 +1,18 @@
 """Start rosbridge (localhost only), the dashboard server in front of it (spec D7), and the
 robot-side nodes the dashboard uses: robot_status (usage, service schedule, alerts), motor_test,
-field_manager (fields, home point, boundary recording) and job_manager (spray jobs).
+field_manager (fields, home point, boundary recording), job_manager (spray jobs), and a container
+of C++ components (topic throttles and the /r5/ping service).
 
 On the simulator, pass use_sim_time:=true fix_requirement:=any sprayer_stub:=true.
 """
 
 from launch import LaunchDescription
-from launch.actions import DeclareLaunchArgument, IncludeLaunchDescription
+from launch.actions import DeclareLaunchArgument
 from launch.conditions import IfCondition
-from launch.launch_description_sources import AnyLaunchDescriptionSource
-from launch.substitutions import LaunchConfiguration, PathJoinSubstitution
+from launch.substitutions import LaunchConfiguration
 from launch_ros.actions import ComposableNodeContainer, Node
 from launch_ros.descriptions import ComposableNode
-from launch_ros.substitutions import FindPackageShare
+from launch_ros.parameter_descriptions import ParameterValue
 
 # Lower-rate copies of frequent topics, for rosbridge and the dashboard's Python nodes. Every
 # message a Python subscriber receives costs CPU, even if it's then thrown away, and rosbridge's
@@ -57,13 +57,22 @@ def generate_launch_description():
     use_sim_time = LaunchConfiguration("use_sim_time")
 
     # Only reachable from the robot itself. Browsers connect through the dashboard server.
-    rosbridge = IncludeLaunchDescription(
-        AnyLaunchDescriptionSource(
-            PathJoinSubstitution(
-                [FindPackageShare("rosbridge_server"), "launch", "rosbridge_websocket_launch.xml"]
-            )
-        ),
-        launch_arguments={"address": "127.0.0.1", "port": rosbridge_port}.items(),
+    # Started directly rather than through rosbridge's launch file, which also starts rosapi (about
+    # 50 MB); the web app uses /r5/ping instead. The two values that differ from rosbridge's own
+    # defaults are the ones its launch file sets.
+    rosbridge = Node(
+        package="rosbridge_server",
+        executable="rosbridge_websocket",
+        name="rosbridge_websocket",
+        output="both",
+        parameters=[
+            {
+                "address": "127.0.0.1",
+                "port": ParameterValue(rosbridge_port, value_type=int),
+                "max_message_size": 10000000,
+                "retry_startup_delay": 5.0,
+            }
+        ],
     )
 
     server = Node(
@@ -78,8 +87,9 @@ def generate_launch_description():
         ],
     )
 
-    throttle = ComposableNodeContainer(
-        name="dashboard_throttle",
+    # The dashboard's C++ nodes, in one process.
+    components = ComposableNodeContainer(
+        name="dashboard_nodes",
         namespace="",
         package="rclcpp_components",
         executable="component_container",
@@ -102,6 +112,10 @@ def generate_launch_description():
                 ],
             )
             for topic, copy, rate in THROTTLED
+        ]
+        + [
+            # Answers at once; the web app uses it for the round-trip time and the link check.
+            ComposableNode(package="r5_dashboard_nodes", plugin="r5_dashboard::Ping", name="ping"),
         ],
     )
 
@@ -151,5 +165,5 @@ def generate_launch_description():
 
     return LaunchDescription(
         arguments
-        + [rosbridge, server, throttle, robot_status, motor_test, field_manager, job_manager, sprayer_stub]
+        + [rosbridge, server, components, robot_status, motor_test, field_manager, job_manager, sprayer_stub]
     )

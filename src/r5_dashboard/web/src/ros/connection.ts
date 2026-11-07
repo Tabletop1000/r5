@@ -108,7 +108,7 @@ export class RobotConnection {
     } else if (action === 'ping') {
       // Any reply counts as activity; the answer itself doesn't matter.
       this.pinging = true;
-      this.callService(SERVICES.getTime, {}, LINK_TIMEOUT_MS)
+      this.callService(SERVICES.ping, {}, LINK_TIMEOUT_MS)
         .catch(() => undefined)
         .finally(() => (this.pinging = false));
     }

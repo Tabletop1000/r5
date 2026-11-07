@@ -18,6 +18,7 @@ browser ──HTTPS / WSS──► r5_dashboard_server (:8443) ──ws://127.0.
 | `web/` | The browser app: TypeScript, React, Vite, roslib |
 | `server/r5_dashboard_server/` | ROS 2 (ament_python) package: HTTPS server, login, WebSocket proxy, the `robot_status`, `motor_test` and `field_manager` nodes, launch file |
 | `server/r5_dashboard_interfaces/` | ROS 2 messages, services and actions between the dashboard and the robot |
+| `server/r5_dashboard_nodes/` | ROS 2 (ament_cmake) package: the dashboard's C++ nodes, as components. So far only `/r5/ping`. |
 
 ## Build the web app
 
@@ -99,7 +100,8 @@ dependencies with the usual `rosdep` command (see the `r5` repository's `doc/dev
 
 | Node | Does |
 | --- | --- |
-| `rosbridge_websocket`, `rosapi` | The ROS link, on localhost only |
+| `rosbridge_websocket` | The ROS link, on localhost only. Started without rosapi, which the dashboard doesn't use. |
+| `dashboard_nodes` | A container of C++ components: lower-rate copies of `/bno055/imu`, `/odometry/local` and `/odometry/global` for rosbridge and the Python nodes, and `/r5/ping`, which the web app calls for the round-trip time and to check the link |
 | `server` | HTTPS, login, web app, WebSocket proxy |
 | `robot_status` | Operating hours, distance, service schedule (`/r5/stats`); active alerts from `/diagnostics_agg` and its own checks (`/r5/alerts`); services to record a service and acknowledge an alert; the robot settings (`/r5/settings`, `/r5/settings/set`) |
 | `motor_test` | `/r5/motor_test` action: drives one side or both slowly for 2 s and checks the wheel speeds. Speed and time are fixed on the robot. |
@@ -232,7 +234,7 @@ robot yet show "Not available"; [TODO_ROBOT.md](TODO_ROBOT.md) lists them.
 | Alerts (strip and Robot page) | `/r5/alerts`, `/r5/alerts/acknowledge` | `robot_status`, which reads `/diagnostics_agg` |
 | Battery | `/battery_state` | Not published yet |
 | WiFi signal | `/r5/wifi_signal_dbm` | `r5_monitor` |
-| Round trip | `/rosapi/get_time` | rosapi |
+| Round trip | `/r5/ping` | `r5_dashboard_nodes` |
 | Versions | `/r5/versions` | `r5_monitor` (`r5` and ROS; motor node firmware not yet) |
 | GPS | `/fix`, `/navpvt` | u-blox driver (`/navpvt` only on the real receiver) |
 | IMU | `/r5/dashboard/imu` (the IMU test uses `/bno055/imu`), `/bno055/calib_status`, `/bno055/temp` | BNO055 driver (the simulator has only `imu`) |

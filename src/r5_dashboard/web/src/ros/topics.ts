@@ -63,8 +63,8 @@ export const SERVICES = {
   resumeJob: { name: '/r5/job/resume', type: 'r5_dashboard_interfaces/srv/ResumeJob' },
   /** Software stop: ends any job, cancels navigation, zero velocity (spec NAV-4). */
   stop: { name: '/r5/stop', type: 'std_srvs/srv/Trigger' },
-  /** From rosapi, which starts with rosbridge. Used to measure round-trip time. */
-  getTime: { name: '/rosapi/get_time', type: 'rosapi_msgs/srv/GetTime' },
+  /** Answers at once (r5_dashboard_nodes). Used for the round-trip time and the link check. */
+  ping: { name: '/r5/ping', type: 'std_srvs/srv/Trigger' },
 } as const;
 
 export const ACTIONS = {

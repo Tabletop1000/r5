@@ -19,12 +19,12 @@
   <exec_depend>nav_msgs</exec_depend>
   <exec_depend>r5_dashboard_interfaces</exec_depend>
   <exec_depend>rclpy</exec_depend>
-  <exec_depend>rosapi</exec_depend>
   <exec_depend>sensor_msgs</exec_depend>
   <exec_depend>std_msgs</exec_depend>
   <exec_depend>std_srvs</exec_depend>
   <exec_depend>python3-aiohttp</exec_depend>
   <exec_depend>python3-cryptography</exec_depend>
+  <exec_depend>r5_dashboard_nodes</exec_depend>
   <exec_depend>rclcpp_components</exec_depend>
   <exec_depend>rosbridge_server</exec_depend>
   <exec_depend>topic_tools</exec_depend>

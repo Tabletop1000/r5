@@ -16,7 +16,7 @@ export function useRoundTrip(): number | null {
     const ping = async () => {
       const start = performance.now();
       try {
-        await robot.callService(SERVICES.getTime, {}, 3000);
+        await robot.callService(SERVICES.ping, {}, 3000);
         if (!cancelled) setRtt(Math.round(performance.now() - start));
       } catch {
         if (!cancelled) setRtt(null);
