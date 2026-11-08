@@ -18,6 +18,7 @@ constexpr uint8_t kUnitSel = 0x3B;
 constexpr uint8_t kOprMode = 0x3D;
 constexpr uint8_t kPwrMode = 0x3E;
 constexpr uint8_t kSysTrigger = 0x3F;
+constexpr uint8_t kTempSource = 0x40;
 constexpr uint8_t kAxisMapConfig = 0x41;  // Followed by kAxisMapSign at 0x42.
 // Calibration offsets and radii, each a little-endian 16-bit value.
 constexpr uint8_t kAccelOffsetX = 0x55;
@@ -33,6 +34,10 @@ constexpr uint8_t kPowerNormal = 0x00;
 // Accelerometer and gravity in m/s² (1 LSB = 0.01 m/s²), gyroscope in rad/s (1 LSB = 1/900 rad/s),
 // Euler angles in degrees, temperature in °C, Android orientation convention.
 constexpr uint8_t kUnitSelValue = 0x82;
+
+// Temperature from the accelerometer. Left unset, the reading on the robot jumped between about
+// 12 °C and the right value.
+constexpr uint8_t kTempSourceAccel = 0x00;
 
 }  // namespace r5_sensors::bno055::reg
 

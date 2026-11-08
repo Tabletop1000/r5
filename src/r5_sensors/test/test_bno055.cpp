@@ -65,6 +65,7 @@ TEST(Bno055, ChecksTheChipId)
   EXPECT_TRUE(d.chip_id_ok());
 }
 
+// As the Python driver, plus the temperature source.
 TEST(Bno055, ConfiguresInTheSameOrderAsThePythonDriver)
 {
   FakeBus bus;
@@ -81,6 +82,7 @@ TEST(Bno055, ConfiguresInTheSameOrderAsThePythonDriver)
     {reg::kPageId, {0x00}},
     {reg::kSysTrigger, {0x00}},
     {reg::kUnitSel, {0x82}},
+    {reg::kTempSource, {0x00}},
     {reg::kAxisMapConfig, {0x21, 0x07}},
     {reg::kOprMode, {0x0C}},
   };

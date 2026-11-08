@@ -42,9 +42,6 @@ setup(
         "console_scripts": [
             "server = r5_dashboard_server.main:main",
             "set_password = r5_dashboard_server.set_password:main",
-            "robot_status = r5_dashboard_server.robot_status_node:main",
-            "motor_test = r5_dashboard_server.motor_test_node:main",
-            "field_manager = r5_dashboard_server.field_manager_node:main",
             "job_manager = r5_dashboard_server.job_manager_node:main",
         ],
     },

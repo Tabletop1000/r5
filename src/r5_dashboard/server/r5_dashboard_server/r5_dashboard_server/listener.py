@@ -1,6 +1,6 @@
 """A second node for a node's frequent subscriptions, spun by its own single-threaded executor.
 
-job_manager and motor_test need rclpy's MultiThreadedExecutor, because their service and action
+job_manager needs rclpy's MultiThreadedExecutor, because its service and action
 callbacks wait for other callbacks to run. That executor costs far more per message than the
 single-threaded one: on a laptop, two 30 Hz odometry subscriptions took 92% of a core with it
 and 8% without it. Subscriptions that only store the latest message go on this node instead.

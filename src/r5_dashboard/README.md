@@ -16,9 +16,9 @@ browser ──HTTPS / WSS──► r5_dashboard_server (:8443) ──ws://127.0.
 | Path | Contents |
 | --- | --- |
 | `web/` | The browser app: TypeScript, React, Vite, roslib |
-| `server/r5_dashboard_server/` | ROS 2 (ament_python) package: HTTPS server, login, WebSocket proxy, the `robot_status`, `motor_test` and `field_manager` nodes, launch file |
+| `server/r5_dashboard_server/` | ROS 2 (ament_python) package: HTTPS server, login, WebSocket proxy, the `job_manager` node, launch file |
 | `server/r5_dashboard_interfaces/` | ROS 2 messages, services and actions between the dashboard and the robot |
-| `server/r5_dashboard_nodes/` | ROS 2 (ament_cmake) package: the dashboard's C++ nodes, as components: `/r5/ping` and `sprayer_stub`. |
+| `server/r5_dashboard_nodes/` | ROS 2 (ament_cmake) package: the dashboard's C++ nodes, as components: `robot_status`, `motor_test`, `field_manager`, `/r5/ping` and `sprayer_stub`. The logic without ROS (settings, stats, fields, geometry, motor test checks) is in `dashboard_core`, with gtests. |
 
 ## Build the web app
 
@@ -101,13 +101,13 @@ dependencies with the usual `rosdep` command (see the `r5` repository's `doc/dev
 | Node | Does |
 | --- | --- |
 | `rosbridge_websocket` | The ROS link, on localhost only. Started without rosapi, which the dashboard doesn't use. |
-| `dashboard_nodes` | A container of C++ components: lower-rate copies of `/bno055/imu`, `/odometry/local` and `/odometry/global` for rosbridge and the Python nodes, `/r5/ping`, which the web app calls for the round-trip time and to check the link, and `sprayer_stub` when it's turned on |
+| `dashboard_nodes` | A container for the C++ nodes below, plus lower-rate copies of `/bno055/imu`, `/odometry/local` and `/odometry/global` for rosbridge and the dashboard nodes, and `/r5/ping`, which the web app calls for the round-trip time and to check the link. One process, one thread. |
 | `server` | HTTPS, login, web app, WebSocket proxy |
-| `robot_status` | Operating hours, distance, service schedule (`/r5/stats`); active alerts from `/diagnostics_agg` and its own checks (`/r5/alerts`); services to record a service and acknowledge an alert; the robot settings (`/r5/settings`, `/r5/settings/set`) |
-| `motor_test` | `/r5/motor_test` action: drives one side or both slowly for 2 s and checks the wheel speeds. Speed and time are fixed on the robot. |
-| `job_manager` | Plans area spray jobs with Fields2Cover and runs them with Nav2: `FollowPath` for rows and turns, `NavigateToPose` to the start and home. Switches the sprayer by position along each row, estimates the tank, drives home to refill, and handles pause, resume and the software stop (`/r5/stop`), which holds zero velocity on `twist_mux`'s top-priority input for 2 s. Its parameters (boom width, tank, pump, speeds, turn radius, Nav2 goal tolerance, checks) are listed at the top of `job_manager_node.py`. |
-| `sprayer_stub` | Optional stand-in for the sprayer: logs `/r5/sprayer/enable` and `/r5/sprayer/flow_setpoint` |
-| `field_manager` | Stores fields and the home point; records a boundary from `/fix` while the robot is driven. Recording can also be started and stopped by holding controller button 3 (Y on an Xbox controller) for a second (`joy_record_button`, `joy_hold_s` parameters). |
+| `robot_status` (C++) | Operating hours, distance, service schedule (`/r5/stats`); active alerts from `/diagnostics_agg` and its own checks (`/r5/alerts`); services to record a service and acknowledge an alert; the robot settings (`/r5/settings`, `/r5/settings/set`) |
+| `motor_test` (C++) | `/r5/motor_test` action: drives one side or both slowly for 2 s and checks the wheel speeds. Speed and time are fixed on the robot. |
+| `job_manager` (Python) | Plans area spray jobs with Fields2Cover and runs them with Nav2: `FollowPath` for rows and turns, `NavigateToPose` to the start and home. Switches the sprayer by position along each row, estimates the tank, drives home to refill, and handles pause, resume and the software stop (`/r5/stop`), which holds zero velocity on `twist_mux`'s top-priority input for 2 s. Its parameters (boom width, tank, pump, speeds, turn radius, Nav2 goal tolerance, checks) are listed at the top of `job_manager_node.py`. |
+| `sprayer_stub` (C++) | Optional stand-in for the sprayer: logs `/r5/sprayer/enable` and `/r5/sprayer/flow_setpoint` |
+| `field_manager` (C++) | Stores fields and the home point; records a boundary from `/fix` while the robot is driven. Recording can also be started and stopped by holding controller button 3 (Y on an Xbox controller) for a second (`joy_record_button`, `joy_hold_s` parameters). |
 
 ### Files in the data directory
 
@@ -140,11 +140,13 @@ example from QGIS or Google Earth, and opens it in the editor to check and save:
 The Settings page holds the robot's nickname; the units and time zone the dashboard shows; the
 maximum, transit and turn speeds; what a job does when the link is lost, the battery is low or the
 robot is on too steep a slope; and sets the garage location (home). The robot describes each setting, with its range and help text, in
-`server/r5_dashboard_server/r5_dashboard_server/settings.py`, and the page builds its form from
-those descriptions. To add a setting:
+`server/r5_dashboard_nodes/src/settings.cpp`, and the page builds its form from those
+descriptions. To add a setting:
 
-1. Add a `Setting` to `SETTINGS` in `settings.py`. Its key, type, default and range are all there.
-2. Read it where it's used. A node subscribes to `/r5/settings` (latched) and calls
+1. Add it to `make_settings()` in `settings.cpp`. Its key, type, default and range are all there.
+   Until `job_manager` is ported to C++, add it to `SETTINGS` in
+   `server/r5_dashboard_server/r5_dashboard_server/settings.py` too, the same.
+2. Read it where it's used. A node subscribes to `/r5/settings` (latched); `job_manager` calls
    `values_from_json`, which fills in defaults. The web app uses `useSettings()`.
 
 The page needs no change. Values are checked on the robot when saved, and a saved value that's no
@@ -221,6 +223,12 @@ In the `r5-laptop` container:
 ```bash
 cd src/r5_dashboard/server/r5_dashboard_server
 python3 -m pytest -p no:cacheprovider test
+```
+
+The C++ nodes' tests run with colcon:
+
+```bash
+colcon test --packages-select r5_dashboard_nodes && colcon test-result --verbose
 ```
 
 ## ROS interfaces the dashboard uses

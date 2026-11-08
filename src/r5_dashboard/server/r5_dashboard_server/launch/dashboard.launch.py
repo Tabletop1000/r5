@@ -1,7 +1,10 @@
 """Start rosbridge (localhost only), the dashboard server in front of it (spec D7), and the
-robot-side nodes the dashboard uses: robot_status (usage, service schedule, alerts), motor_test,
-field_manager (fields, home point, boundary recording), job_manager (spray jobs), and a container
-of C++ components: topic throttles, the /r5/ping service and the optional sprayer_stub.
+robot-side nodes the dashboard uses.
+
+The C++ nodes run as components in one container, dashboard_nodes: robot_status (usage, service
+schedule, alerts, settings), motor_test, field_manager (fields, home point, boundary recording),
+the /r5/ping service, topic throttles and the optional sprayer_stub. job_manager (spray jobs) is
+still Python.
 
 On the simulator, pass use_sim_time:=true fix_requirement:=any sprayer_stub:=true.
 """
@@ -116,6 +119,29 @@ def generate_launch_description():
         + [
             # Answers at once; the web app uses it for the round-trip time and the link check.
             ComposableNode(package="r5_dashboard_nodes", plugin="r5_dashboard::Ping", name="ping"),
+            # Operating time and alert times use the wall clock even in simulation.
+            ComposableNode(
+                package="r5_dashboard_nodes",
+                plugin="r5_dashboard::RobotStatusNode",
+                name="robot_status",
+                parameters=[{"data_dir": data_dir}],
+                remappings=REMAPS,
+            ),
+            ComposableNode(
+                package="r5_dashboard_nodes",
+                plugin="r5_dashboard::FieldManagerNode",
+                name="field_manager",
+                parameters=[{"data_dir": data_dir, "record_fix_requirement": fix_requirement}],
+            ),
+            # Wheel geometry and joint names match r5's diffbot_controllers.yaml. Commands go
+            # through twist_mux (r5_bringup/config/twist_mux.yaml).
+            ComposableNode(
+                package="r5_dashboard_nodes",
+                plugin="r5_dashboard::MotorTestNode",
+                name="motor_test",
+                parameters=[{"use_sim_time": use_sim_time, "cmd_vel_topic": "/mux/test"}],
+                remappings=REMAPS,
+            ),
             # Logs sprayer commands, until the sprayer exists.
             ComposableNode(
                 package="r5_dashboard_nodes",
@@ -123,34 +149,6 @@ def generate_launch_description():
                 name="sprayer_stub",
                 condition=IfCondition(LaunchConfiguration("sprayer_stub")),
             ),
-        ],
-    )
-
-    robot_status = Node(
-        package="r5_dashboard_server",
-        executable="robot_status",
-        output="both",
-        # Operating time and alert times use the wall clock even in simulation.
-        parameters=[{"data_dir": data_dir}],
-        remappings=REMAPS,
-    )
-
-    # Wheel geometry and joint names match r5's diffbot_controllers.yaml. Commands go through
-    # twist_mux (r5_bringup/config/twist_mux.yaml).
-    motor_test = Node(
-        package="r5_dashboard_server",
-        executable="motor_test",
-        output="both",
-        parameters=[{"use_sim_time": use_sim_time, "cmd_vel_topic": "/mux/test"}],
-        remappings=REMAPS,
-    )
-
-    field_manager = Node(
-        package="r5_dashboard_server",
-        executable="field_manager",
-        output="both",
-        parameters=[
-            {"data_dir": data_dir, "record_fix_requirement": fix_requirement}
         ],
     )
 
@@ -165,5 +163,5 @@ def generate_launch_description():
 
     return LaunchDescription(
         arguments
-        + [rosbridge, server, components, robot_status, motor_test, field_manager, job_manager]
+        + [rosbridge, server, components, job_manager]
     )

@@ -124,6 +124,7 @@ Offsets Device::configure(const Config & config)
   write_byte(reg::kPageId, 0x00);
   write_byte(reg::kSysTrigger, 0x00);
   write_byte(reg::kUnitSel, reg::kUnitSelValue);
+  write_byte(reg::kTempSource, reg::kTempSourceAccel);
   bus_.write(reg::kAxisMapConfig, config.axis_map.data(), config.axis_map.size());
   const Offsets before = read_offsets();
   if (config.offsets) {
