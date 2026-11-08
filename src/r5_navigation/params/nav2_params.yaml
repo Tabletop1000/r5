@@ -50,7 +50,7 @@ controller_server:
 
     FollowPath:
       plugin: "nav2_regulated_pure_pursuit_controller::RegulatedPurePursuitController"
-      desired_linear_vel: 0.3  # linear.x.max_velocity in diffbot_controllers.yaml
+      desired_linear_vel: 0.6  # linear.x.max_velocity in diffbot_controllers.yaml
       lookahead_dist: 2.0  # must stay above xy_goal_tolerance and inside the local costmap
       use_velocity_scaled_lookahead_dist: false
       use_regulated_linear_velocity_scaling: true
@@ -136,8 +136,8 @@ velocity_smoother:
     scale_velocities: false
     feedback: "OPEN_LOOP"
     # Same limits as diffbot_controllers.yaml, with gentler linear acceleration.
-    max_velocity: [0.3, 0.0, 1.0]
-    min_velocity: [-0.3, 0.0, -1.0]
+    max_velocity: [0.6, 0.0, 1.0]
+    min_velocity: [-0.6, 0.0, -1.0]
     max_accel: [0.5, 0.0, 1.0]
     max_decel: [-0.5, 0.0, -1.0]
     deadband_velocity: [0.0, 0.0, 0.0]

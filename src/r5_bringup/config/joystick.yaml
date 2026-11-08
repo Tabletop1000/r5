@@ -18,9 +18,9 @@ teleop_twist_joy_node:
     axis_linear:  # left stick vertical
       x: 1
     scale_linear:
-      x: 0.15
+      x: 0.3
     scale_linear_turbo:
-      x: 0.3  # linear.x.max_velocity in diffbot_controllers.yaml
+      x: 0.6  # linear.x.max_velocity in diffbot_controllers.yaml
     axis_angular:  # right stick horizontal
       yaw: 3
     scale_angular:

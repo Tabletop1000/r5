@@ -59,7 +59,7 @@ TEST(Settings, SchemaIsJsonThePageCanRead)
 TEST(Settings, BadValuesAreRefused)
 {
   const std::vector<std::pair<Json, std::string>> cases = {
-    {{{"max_speed_kmh", 5.0}}, "Maximum speed can be at most 1.08 km/h."},
+    {{{"max_speed_kmh", 5.0}}, "Maximum speed can be at most 2.16 km/h."},
     {{{"max_speed_kmh", 0.0}}, "Maximum speed must be at least 0.1 km/h."},
     {{{"max_speed_kmh", "fast"}}, "Maximum speed must be a number."},
     {{{"max_speed_kmh", true}}, "Maximum speed must be a number."},

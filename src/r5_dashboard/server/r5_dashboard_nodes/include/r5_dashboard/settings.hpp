@@ -27,8 +27,8 @@ namespace r5_dashboard::settings
 // Keeps keys in the order they're added, as Python's json did.
 using Json = nlohmann::ordered_json;
 
-// 0.3 m/s: linear.x.max_velocity in r5's diffbot_controllers.yaml and Nav2's desired_linear_vel.
-constexpr double kHardwareMaxSpeedKmh = 1.08;
+// 0.6 m/s: linear.x.max_velocity in r5's diffbot_controllers.yaml and Nav2's desired_linear_vel.
+constexpr double kHardwareMaxSpeedKmh = 2.16;
 
 inline constexpr const char * kCommsContinue = "continue";
 inline constexpr const char * kCommsReturnHome = "return_home";

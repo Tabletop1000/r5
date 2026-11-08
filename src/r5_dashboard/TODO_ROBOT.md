@@ -153,7 +153,7 @@ These robot-side items decide how well it works on the real robot:
   - `FollowPath.lookahead_dist` is 2.0 m, more than the 1.5 m row spacing. Turns will be cut
     short and rows joined late. Consider ~0.6–1.0 m for coverage, or a second controller
     plugin for coverage with its own settings (set `job_manager`'s `controller_id`).
-  - `desired_linear_vel` 0.3 m/s caps the spray speed at 1.08 km/h. `job_manager` lowers it per
+  - `desired_linear_vel` 0.6 m/s caps the spray speed at 2.16 km/h. `job_manager` lowers it per
     job through `/speed_limit`. Raise it if spraying should go faster, and update
     `job_manager`'s `max_speed_kmh`.
 - [ ] **`/fromLL`.** `job_manager` converts field coordinates to the `map` frame with

@@ -19,8 +19,8 @@ from pathlib import Path
 
 from .auth import write_private_file
 
-# 0.3 m/s: linear.x.max_velocity in r5's diffbot_controllers.yaml and Nav2's desired_linear_vel.
-HARDWARE_MAX_SPEED_KMH = 1.08
+# 0.6 m/s: linear.x.max_velocity in r5's diffbot_controllers.yaml and Nav2's desired_linear_vel.
+HARDWARE_MAX_SPEED_KMH = 2.16
 
 COMMS_CONTINUE = "continue"
 COMMS_RETURN_HOME = "return_home"

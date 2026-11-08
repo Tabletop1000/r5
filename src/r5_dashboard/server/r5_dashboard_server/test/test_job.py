@@ -38,7 +38,7 @@ def test_flow_matches_spec_formula():
         ({"application_rate_l_per_m2": 0}, "application rate"),
         ({"application_rate_l_per_m2": 2}, "too high"),
         ({"boom_width_m": -1}, "boom width"),
-        ({"speed_kmh": 2.0}, "top speed"),
+        ({"speed_kmh": 3.0}, "top speed"),
         ({"tank_capacity_l": float("nan")}, "tank capacity"),
         ({"auto_angle": False, "row_angle_deg": float("nan")}, "row direction"),
     ],

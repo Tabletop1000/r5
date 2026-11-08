@@ -138,7 +138,7 @@ class JobManagerNode(Node):
             tank_capacity_l=float(p("tank_capacity_l", 50.0)),
         )
         self.limits = RobotLimits(
-            max_speed_kmh=float(p("max_speed_kmh", 1.08)),
+            max_speed_kmh=float(p("max_speed_kmh", 2.16)),
             pump_max_flow_l_min=float(p("pump_max_flow_l_min", 10.0)),
             tank_reserve_fraction=float(p("tank_reserve_fraction", 0.05)),
             turn_radius_m=float(p("turn_radius_m", 1.0)),

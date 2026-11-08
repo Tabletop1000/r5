@@ -46,7 +46,7 @@
             <parent link="${parent_link}"/>
             <child link="${prefix}${side}_wheel"/>
             <axis xyz="0 1 0"/>
-            <limit effort="50.0" velocity="3.0"/>
+            <limit effort="50.0" velocity="6.0"/>
             <dynamics damping="0.2"/>
         </joint>
 

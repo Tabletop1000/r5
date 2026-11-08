@@ -45,7 +45,7 @@ class SpraySettings:
 
 @dataclass(frozen=True)
 class RobotLimits:
-    max_speed_kmh: float = 1.08  # Nav2 desired_linear_vel 0.3 m/s
+    max_speed_kmh: float = 2.16  # Nav2 desired_linear_vel 0.6 m/s
     pump_max_flow_l_min: float = 10.0
     tank_reserve_fraction: float = 0.05
     turn_radius_m: float = 1.0
