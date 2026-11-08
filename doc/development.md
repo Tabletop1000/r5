@@ -200,6 +200,13 @@ source install/setup.bash
 ros2 launch r5_bringup r5.launch.py
 ```
 
+If the compiler is killed (`Killed signal terminated program cc1plus`), the build ran out of
+memory. Stop `r5.launch.py` and build one file at a time:
+
+```bash
+MAKEFLAGS=-j1 colcon build --parallel-workers 1
+```
+
 `rosdep` is only needed when dependencies change. `--skip-keys` keeps Gazebo off the robot, because
 `r5_simulation` is only for the laptop. Run `sudo apt update && sudo apt upgrade` before
 it, because ROS packages from different dates can crash with symbol errors. The launch stops with a fatal error if a motor node

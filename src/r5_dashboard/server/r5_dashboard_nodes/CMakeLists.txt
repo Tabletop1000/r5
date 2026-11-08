@@ -4,6 +4,11 @@ project(r5_dashboard_nodes)
 if(CMAKE_COMPILER_IS_GNUCXX OR CMAKE_CXX_COMPILER_ID MATCHES "Clang")
   add_compile_options(-Wall -Wextra -Wpedantic)
 endif()
+if(CMAKE_COMPILER_IS_GNUCXX)
+  # On the Raspberry Pi (aarch64), GCC notes an ABI change from GCC 10 for every std::pair argument.
+  # Everything here is built with the same compiler, so it doesn't apply.
+  add_compile_options(-Wno-psabi)
+endif()
 
 find_package(ament_cmake REQUIRED)
 find_package(diagnostic_msgs REQUIRED)

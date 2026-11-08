@@ -11,6 +11,7 @@ RUN apt-get update && DEBIAN_FRONTEND=noninteractive apt-get upgrade -y \
     iputils-ping \
     liburdfdom-tools \
     netcat-openbsd \
+    nlohmann-json3-dev \
     openssh-client \
     python3-aiohttp \
     python3-cryptography \
