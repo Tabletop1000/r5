@@ -65,6 +65,8 @@ export const SERVICES = {
   stop: { name: '/r5/stop', type: 'std_srvs/srv/Trigger' },
   /** Answers at once (r5_dashboard_nodes). Used for the round-trip time and the link check. */
   ping: { name: '/r5/ping', type: 'std_srvs/srv/Trigger' },
+  /** navsat_transform's own parameter service, for yaw_offset (useYawOffsetDeg). */
+  navsatParameters: { name: '/navsat_transform/get_parameters', type: 'rcl_interfaces/srv/GetParameters' },
 } as const;
 
 export const ACTIONS = {

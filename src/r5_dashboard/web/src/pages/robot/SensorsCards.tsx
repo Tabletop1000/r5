@@ -1,4 +1,5 @@
 import { Card, Reading, Readings } from '../../components/Card';
+import { useYawOffsetDeg } from '../../hooks/useYawOffset';
 import { useTopic, useTopicWithRate } from '../../ros/RobotContext';
 import { TOPICS, type Imu, type JointState, type NavPvt, type NavSatFix, type StringMsg, type Temperature } from '../../ros/topics';
 import { fixed, formatSpeed } from '../../robot/format';
@@ -41,8 +42,9 @@ export function ImuCard() {
   const imu = useTopic<Imu>(TOPICS.imu).message;
   const cal = parseCalibration(useTopic<StringMsg>(TOPICS.imuCalibration).message?.data);
   const temp = useTopic<Temperature>(TOPICS.imuTemperature).message;
+  const yawOffsetDeg = useYawOffsetDeg();
   const e = imu ? quaternionToEuler(imu.orientation) : null;
-  const heading = e ? compassHeading(e.yawDeg) : null;
+  const heading = e ? compassHeading(e.yawDeg + yawOffsetDeg) : null;
   return (
     <Card title="IMU">
       <Readings>

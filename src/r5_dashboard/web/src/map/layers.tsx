@@ -16,6 +16,7 @@ import { TOPICS, type Imu, type LatLon, type NavSatFix } from '../ros/topics';
 import { compassHeading, quaternionToEuler } from '../robot/imu';
 import { useRobotName } from '../settings/useSettings';
 import { useMap } from './MapView';
+import { useYawOffsetDeg } from '../hooks/useYawOffset';
 
 type WithoutSource<T> = T extends unknown ? Omit<T, 'source'> : never;
 type LayerWithoutSource = WithoutSource<FillLayerSpecification | LineLayerSpecification | CircleLayerSpecification>;
@@ -163,12 +164,13 @@ function useMarker(className: string, position: LatLon | null, rotation = 0, tit
   }, [map, position, rotation]);
 }
 
-/** Robot position from /fix and heading from the IMU. */
+/** Robot position from /fix and heading from the IMU, corrected by navsat_transform's yaw_offset. */
 export function RobotMarker() {
   const fix = useTopic<NavSatFix>(TOPICS.fix).message;
   const imu = useTopic<Imu>(TOPICS.imu).message;
   const position = fix && fix.status.status >= 0 ? { latitude: fix.latitude, longitude: fix.longitude } : null;
-  const heading = imu ? compassHeading(quaternionToEuler(imu.orientation).yawDeg) : 0;
+  const yawOffsetDeg = useYawOffsetDeg();
+  const heading = imu ? compassHeading(quaternionToEuler(imu.orientation).yawDeg + yawOffsetDeg) : 0;
   const name = useRobotName();
   useMarker('robot-marker', position, heading, name);
   useLabel('robot-label', position, name);
