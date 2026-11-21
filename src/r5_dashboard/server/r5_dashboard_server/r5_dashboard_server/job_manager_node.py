@@ -42,6 +42,7 @@ from rclpy.action import ActionClient
 from rclpy.callback_groups import ReentrantCallbackGroup
 from rclpy.executors import MultiThreadedExecutor
 from rclpy.node import Node
+from rclpy.parameter import Parameter
 from rclpy.qos import DurabilityPolicy, QoSProfile, qos_profile_sensor_data
 from robot_localization.srv import FromLL
 from sensor_msgs.msg import BatteryState, Imu, NavSatFix
@@ -59,6 +60,7 @@ from .job import Affine2D, Episode, Tank, along_track, angle_difference, extend_
 from .listener import Listener
 from .settings import BATTERY_LOW, BATTERY_STOP, BATTERY_WARN, LINK_LOST, TOO_STEEP, values_from_json
 from .settings import ALERTS_ALLOW_ACKNOWLEDGED, COMMS_CONTINUE, COMMS_DELAYED_RETURN_HOME, COMMS_STOP
+from .settings import configure as configure_settings
 from .settings import defaults as settings_defaults
 from .units import format_area, format_volume
 from .shutdown import init_without_signal_handlers
@@ -137,13 +139,19 @@ class JobManagerNode(Node):
             speed_kmh=float(p("default_speed_kmh", 1.0)),
             tank_capacity_l=float(p("tank_capacity_l", 50.0)),
         )
+        # max_linear_speed from r5's config/limits.yaml, in km/h. No default, so it can't drift
+        # from the robot's real limit: dashboard.launch.py always sets it.
+        top_kmh = self.declare_parameter("max_speed_kmh", Parameter.Type.DOUBLE).value
+        if top_kmh is None:
+            raise ValueError("max_speed_kmh must be set (dashboard.launch.py sets it from r5's config/limits.yaml)")
+        configure_settings(top_kmh)
         self.limits = RobotLimits(
-            max_speed_kmh=float(p("max_speed_kmh", 1.08)),
+            max_speed_kmh=top_kmh,
             pump_max_flow_l_min=float(p("pump_max_flow_l_min", 10.0)),
             tank_reserve_fraction=float(p("tank_reserve_fraction", 0.05)),
             turn_radius_m=float(p("turn_radius_m", 1.0)),
             goal_tolerance_m=float(p("goal_tolerance_m", 1.5)),
-            travel_speed_mps=float(p("travel_speed_mps", 0.3)),
+            travel_speed_mps=float(p("travel_speed_mps", top_kmh / 3.6)),
         )
         self.fix_requirement = str(p("job_fix_requirement", "rtk_fixed"))
         if self.fix_requirement not in REQUIREMENTS:

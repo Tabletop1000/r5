@@ -27,8 +27,6 @@ namespace r5_dashboard::settings
 // Keeps keys in the order they're added, as Python's json did.
 using Json = nlohmann::ordered_json;
 
-// 0.3 m/s: linear.x.max_velocity in r5's diffbot_controllers.yaml and Nav2's desired_linear_vel.
-constexpr double kHardwareMaxSpeedKmh = 1.08;
 
 inline constexpr const char * kCommsContinue = "continue";
 inline constexpr const char * kCommsReturnHome = "return_home";
@@ -89,6 +87,14 @@ public:
 // IANA time zones under zoneinfo_dir, as browsers know them, after "this device's time zone".
 Choices time_zone_choices(const std::filesystem::path & zoneinfo_dir = "/usr/share/zoneinfo");
 
+// Sets the robot's top speed in km/h, max_linear_speed in r5's config/limits.yaml, which is the
+// limit and default of the speed settings. Call it before anything below: robot_status does, from
+// its max_speed_kmh parameter, which dashboard.launch.py fills in from limits.yaml.
+void configure(double top_speed_kmh);
+// The value given to configure(). Throws std::logic_error if it hasn't been called.
+double top_speed_kmh();
+
+// These throw std::logic_error until configure() has been called.
 const std::vector<Setting> & all();
 const Setting * find(const std::string & key);
 

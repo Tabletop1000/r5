@@ -60,7 +60,7 @@
       <xacro:if value="${use_gazebo}">
           <gazebo>
               <plugin filename="gz_ros2_control-system" name="gz_ros2_control::GazeboSimROS2ControlPlugin">
-                  <parameters>$(find r5)/config/diffbot_controllers.yaml</parameters>
+                  <parameters>$(arg controllers_file)</parameters>
               </plugin>
           </gazebo>
       </xacro:if>

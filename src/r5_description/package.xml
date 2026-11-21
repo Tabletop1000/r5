@@ -12,6 +12,7 @@
   <author email="denis.stogl@stoglrobotics.de">Dr.-Ing. Denis Štogl</author>
 
   <buildtool_depend>ament_cmake</buildtool_depend>
+  <buildtool_depend>ament_cmake_python</buildtool_depend>
   <build_depend>ros2_control_cmake</build_depend>
 
   <depend>backward_ros</depend>
@@ -21,7 +22,9 @@
   <depend>rclcpp</depend>
   <depend>rclcpp_lifecycle</depend>
 
+  <exec_depend>ament_index_python</exec_depend>
   <exec_depend>controller_manager</exec_depend>
+  <exec_depend>python3-yaml</exec_depend>
   <exec_depend>diff_drive_controller</exec_depend>
   <exec_depend>joint_state_broadcaster</exec_depend>
   <exec_depend>joint_state_publisher_gui</exec_depend>

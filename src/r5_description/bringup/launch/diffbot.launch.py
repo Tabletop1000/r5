@@ -12,6 +12,9 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import os
+
+from ament_index_python.packages import get_package_share_directory
 from launch import LaunchDescription
 from launch.actions import DeclareLaunchArgument, RegisterEventHandler
 from launch.conditions import IfCondition
@@ -21,6 +24,7 @@ from launch.substitutions import Command, FindExecutable, PathJoinSubstitution, 
 from launch_ros.actions import Node
 from launch_ros.parameter_descriptions import ParameterValue
 from launch_ros.substitutions import FindPackageShare
+from r5_limits import fill
 
 
 def generate_launch_description():
@@ -75,12 +79,9 @@ def generate_launch_description():
         "robot_description": ParameterValue(robot_description_content, value_type=str)
     }
 
-    robot_controllers = PathJoinSubstitution(
-        [
-            FindPackageShare("r5"),
-            "config",
-            "diffbot_controllers.yaml",
-        ]
+    # With the speed limits from config/limits.yaml filled in.
+    robot_controllers = fill(
+        os.path.join(get_package_share_directory("r5"), "config", "diffbot_controllers.yaml")
     )
     rviz_config_file = PathJoinSubstitution(
         [FindPackageShare("r5"), "rviz", "r5.rviz"]

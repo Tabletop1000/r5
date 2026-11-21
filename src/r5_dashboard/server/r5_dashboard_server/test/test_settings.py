@@ -6,13 +6,13 @@ from r5_dashboard_server.settings import (
     BY_KEY,
     COMMS_CONTINUE,
     COMMS_STOP,
-    HARDWARE_MAX_SPEED_KMH,
     SETTINGS,
     SettingsError,
     SettingsStore,
     check_changes,
     defaults,
     schema_json,
+    top_speed_kmh,
     values_from_json,
 )
 
@@ -33,7 +33,7 @@ def test_keys_are_unique_and_shown_when_refers_to_a_choice():
 def test_schema_is_json_the_page_can_read():
     schema = json.loads(schema_json())
     by_key = {s["key"]: s for s in schema}
-    assert by_key["max_speed_kmh"]["maximum"] == HARDWARE_MAX_SPEED_KMH
+    assert by_key["max_speed_kmh"]["maximum"] == top_speed_kmh()
     assert {"value": COMMS_STOP, "label": "Stop and wait"} in by_key["comms_loss_action"]["choices"]
     assert by_key["comms_loss_delay_min"]["shown_when"] == {"key": "comms_loss_action", "value": "delayed_return_home"}
 
@@ -71,7 +71,7 @@ def test_store_saves_and_loads(tmp_path):
     assert values == defaults() and ignored == []
     values = store.update(values, {"robot_name": "Spot", "comms_loss_action": COMMS_STOP})
     assert SettingsStore(tmp_path).load() == (values, [])
-    assert values["robot_name"] == "Spot" and values["max_speed_kmh"] == HARDWARE_MAX_SPEED_KMH
+    assert values["robot_name"] == "Spot" and values["max_speed_kmh"] == top_speed_kmh()
     assert (tmp_path / "settings.json").stat().st_mode & 0o777 == 0o600
 
 
@@ -99,5 +99,5 @@ def test_store_survives_a_damaged_file(tmp_path):
 def test_values_from_json_fills_in_defaults():
     values = values_from_json(json.dumps({"comms_loss_action": COMMS_STOP, "max_speed_kmh": -1}))
     assert values["comms_loss_action"] == COMMS_STOP
-    assert values["max_speed_kmh"] == HARDWARE_MAX_SPEED_KMH
+    assert values["max_speed_kmh"] == top_speed_kmh()
     assert values_from_json("")["comms_loss_action"] == COMMS_CONTINUE

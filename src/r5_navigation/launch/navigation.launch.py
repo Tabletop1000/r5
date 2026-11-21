@@ -1,17 +1,20 @@
+import os
+
+from ament_index_python.packages import get_package_share_directory
 from launch import LaunchDescription
-from launch.substitutions import PathJoinSubstitution
 
 from launch_ros.actions import Node
 from launch_ros.descriptions import ParameterFile
-from launch_ros.substitutions import FindPackageShare
+from r5_limits import fill
 
 
 # Nav2's navigation_launch.py isn't used because it routes /cmd_vel through collision_monitor,
 # which needs a scan source, and it starts the route and docking servers that R5 doesn't use.
 # Commands go to twist_mux (r5_bringup/command.launch.py), which passes them to /cmd_vel.
 def generate_launch_description():
+    # With the speed limits from r5's config/limits.yaml filled in.
     params = ParameterFile(
-        PathJoinSubstitution([FindPackageShare("r5_navigation"), "params", "nav2_params.yaml"]),
+        fill(os.path.join(get_package_share_directory("r5_navigation"), "params", "nav2_params.yaml")),
         allow_substs=True,
     )
 

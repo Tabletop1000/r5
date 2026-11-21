@@ -14,6 +14,13 @@
 namespace s = r5_dashboard::settings;
 using s::Json;
 
+namespace
+{
+// The robot's top speed for the tests. robot_status gets it from r5's config/limits.yaml.
+constexpr double kTopKmh = 2.16;
+[[maybe_unused]] const bool configured = (s::configure(kTopKmh), true);
+}  // namespace
+
 TEST(Settings, EveryDefaultIsValid)
 {
   EXPECT_EQ(s::check_changes(s::defaults()), s::defaults());
@@ -44,7 +51,7 @@ TEST(Settings, SchemaIsJsonThePageCanRead)
   for (const auto & item : schema) {
     by_key[item["key"].get<std::string>()] = item;
   }
-  EXPECT_EQ(by_key["max_speed_kmh"]["maximum"], s::kHardwareMaxSpeedKmh);
+  EXPECT_EQ(by_key["max_speed_kmh"]["maximum"], kTopKmh);
   EXPECT_EQ(by_key["max_speed_kmh"]["quantity"], "speed");
   const Json stop = {{"value", s::kCommsStop}, {"label", "Stop and wait"}};
   const auto & choices = by_key["comms_loss_action"]["choices"];
@@ -59,7 +66,7 @@ TEST(Settings, SchemaIsJsonThePageCanRead)
 TEST(Settings, BadValuesAreRefused)
 {
   const std::vector<std::pair<Json, std::string>> cases = {
-    {{{"max_speed_kmh", 5.0}}, "Maximum speed can be at most 1.08 km/h."},
+    {{{"max_speed_kmh", 5.0}}, "Maximum speed can be at most 2.16 km/h."},
     {{{"max_speed_kmh", 0.0}}, "Maximum speed must be at least 0.1 km/h."},
     {{{"max_speed_kmh", "fast"}}, "Maximum speed must be a number."},
     {{{"max_speed_kmh", true}}, "Maximum speed must be a number."},
@@ -110,7 +117,7 @@ TEST_F(TempDir, StoreSavesAndLoads)
   EXPECT_EQ(again.values, values);
   EXPECT_TRUE(again.ignored.empty());
   EXPECT_EQ(values["robot_name"], "Spot");
-  EXPECT_EQ(values["max_speed_kmh"], s::kHardwareMaxSpeedKmh);
+  EXPECT_EQ(values["max_speed_kmh"], kTopKmh);
   struct stat st {};
   ASSERT_EQ(::stat((dir_ / "settings.json").c_str(), &st), 0);
   EXPECT_EQ(st.st_mode & 0777, 0600u);

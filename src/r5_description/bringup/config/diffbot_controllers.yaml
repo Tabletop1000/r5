@@ -32,23 +32,24 @@ diffbot_base_controller:
     #publish_limited_velocity: true
     #velocity_rolling_window_size: 10
 
-    # Velocity and acceleration limits
+    # Velocity and acceleration limits, from config/limits.yaml. Launch fills in each $(var ...)
+    # (r5_limits), so start the controllers through a launch file rather than with this file as is.
     # Whenever a min_* is unspecified, default to -max_*
     linear.x.has_velocity_limits: true
     linear.x.has_acceleration_limits: true
     linear.x.has_jerk_limits: false
-    linear.x.max_velocity: 0.3  # 3 rad/s joint limit * wheel_radius
-    linear.x.min_velocity: -0.3
-    linear.x.max_acceleration: 1.0
+    linear.x.max_velocity: $(var max_linear_speed)
+    linear.x.min_velocity: -$(var max_linear_speed)
+    linear.x.max_acceleration: $(var max_linear_accel)
     linear.x.max_jerk: 0.0
     linear.x.min_jerk: 0.0
 
     angular.z.has_velocity_limits: true
     angular.z.has_acceleration_limits: true
     angular.z.has_jerk_limits: false
-    angular.z.max_velocity: 1.0
-    angular.z.min_velocity: -1.0
-    angular.z.max_acceleration: 1.0
-    angular.z.min_acceleration: -1.0
+    angular.z.max_velocity: $(var max_angular_speed)
+    angular.z.min_velocity: -$(var max_angular_speed)
+    angular.z.max_acceleration: $(var max_angular_accel)
+    angular.z.min_acceleration: -$(var max_angular_accel)
     angular.z.max_jerk: 0.0
     angular.z.min_jerk: 0.0

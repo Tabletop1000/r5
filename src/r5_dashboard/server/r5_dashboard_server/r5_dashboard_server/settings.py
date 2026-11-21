@@ -19,9 +19,6 @@ from pathlib import Path
 
 from .auth import write_private_file
 
-# 0.3 m/s: linear.x.max_velocity in r5's diffbot_controllers.yaml and Nav2's desired_linear_vel.
-HARDWARE_MAX_SPEED_KMH = 1.08
-
 COMMS_CONTINUE = "continue"
 COMMS_RETURN_HOME = "return_home"
 COMMS_DELAYED_RETURN_HOME = "delayed_return_home"
@@ -105,180 +102,211 @@ class Setting:
         return out
 
 
-SETTINGS: tuple[Setting, ...] = (
-    Setting(
-        key="robot_name",
-        label="Nickname",
-        group="Robot",
-        kind="text",
-        default="R5",
-        max_length=20,
-        help="Shown at the top of the screen and next to the robot on the map.",
-    ),
-    Setting(
-        key="units",
-        label="Units",
-        group="Display",
-        kind="choice",
-        default=UNITS_METRIC,
-        choices=((UNITS_METRIC, "Metric (km/h, hectares, litres)"), (UNITS_US, "US (mph, acres, US gallons, feet)")),
-        help="For speeds, areas, volumes and distances on the dashboard. Sensor readings stay in SI units.",
-    ),
-    Setting(
-        key="time_zone",
-        label="Time zone",
-        group="Display",
-        kind="choice",
-        default=DEVICE_TIME_ZONE,
-        choices=time_zone_choices(),
-        help="For times and dates on the dashboard.",
-    ),
-    Setting(
-        key="max_speed_kmh",
-        label="Maximum speed",
-        group="Driving",
-        kind="number",
-        default=HARDWARE_MAX_SPEED_KMH,
-        unit="km/h",
-        minimum=0.1,
-        maximum=HARDWARE_MAX_SPEED_KMH,
-        step=0.01,
-        quantity="speed",
-        help="No part of a spray job goes faster than this. The Xbox controller has its own speeds.",
-    ),
-    Setting(
-        key="transit_speed_kmh",
-        label="Transit speed",
-        group="Driving",
-        kind="number",
-        default=HARDWARE_MAX_SPEED_KMH,
-        unit="km/h",
-        minimum=0.1,
-        maximum=HARDWARE_MAX_SPEED_KMH,
-        step=0.01,
-        quantity="speed",
-        help="Driving to the field, home and back, with the sprayer off. Never more than the maximum speed.",
-    ),
-    Setting(
-        key="turn_speed_kmh",
-        label="Turn speed",
-        group="Driving",
-        kind="number",
-        default=0.5,
-        unit="km/h",
-        minimum=0.1,
-        maximum=HARDWARE_MAX_SPEED_KMH,
-        step=0.01,
-        quantity="speed",
-        help="Turning between rows. Never more than the maximum speed.",
-    ),
-    Setting(
-        key="comms_loss_action",
-        label="If the link is lost",
-        group="Link loss",
-        kind="choice",
-        default=COMMS_CONTINUE,
-        choices=(
-            (COMMS_CONTINUE, "Keep working"),
-            (COMMS_RETURN_HOME, "Return home"),
-            (COMMS_DELAYED_RETURN_HOME, "Keep working, then return home"),
-            (COMMS_STOP, "Stop and wait"),
+def _make_settings(top_kmh: float) -> tuple[Setting, ...]:
+    """The settings, for a robot whose top speed is top_kmh."""
+    return (
+        Setting(
+            key="robot_name",
+            label="Nickname",
+            group="Robot",
+            kind="text",
+            default="R5",
+            max_length=20,
+            help="Shown at the top of the screen and next to the robot on the map.",
         ),
-        help=(
-            "What a running spray job does when no dashboard has been connected for the time below. "
-            "The sprayer is off whenever the robot stops or drives home. After returning home or "
-            "stopping, the job waits for Resume."
+        Setting(
+            key="units",
+            label="Units",
+            group="Display",
+            kind="choice",
+            default=UNITS_METRIC,
+            choices=(
+                (UNITS_METRIC, "Metric (km/h, hectares, litres)"),
+                (UNITS_US, "US (mph, acres, US gallons, feet)"),
+            ),
+            help="For speeds, areas, volumes and distances on the dashboard. Sensor readings stay in SI units.",
         ),
-    ),
-    Setting(
-        key="comms_loss_timeout_s",
-        label="Link counts as lost after",
-        group="Link loss",
-        kind="number",
-        default=30.0,
-        unit="s",
-        minimum=15.0,
-        maximum=600.0,
-        step=1.0,
-        help=(
-            "Shorter dropouts are ignored. It takes about 15 s to notice a dashboard has gone. "
-            "A phone with its screen locked usually counts as disconnected."
+        Setting(
+            key="time_zone",
+            label="Time zone",
+            group="Display",
+            kind="choice",
+            default=DEVICE_TIME_ZONE,
+            choices=time_zone_choices(),
+            help="For times and dates on the dashboard.",
         ),
-    ),
-    Setting(
-        key="comms_loss_delay_min",
-        label="Return home after",
-        group="Link loss",
-        kind="number",
-        default=5.0,
-        unit="min",
-        minimum=1.0,
-        maximum=120.0,
-        step=1.0,
-        shown_when=("comms_loss_action", COMMS_DELAYED_RETURN_HOME),
-        help="How long the robot keeps working without a link before it drives home.",
-    ),
-    Setting(
-        key="low_battery_action",
-        label="If the battery is low",
-        group="Battery",
-        kind="choice",
-        default=BATTERY_RETURN_HOME,
-        choices=(
-            (BATTERY_WARN, "Only warn"),
-            (BATTERY_RETURN_HOME, "Return home"),
-            (BATTERY_STOP, "Stop and wait"),
+        Setting(
+            key="max_speed_kmh",
+            label="Maximum speed",
+            group="Driving",
+            kind="number",
+            default=top_kmh,
+            unit="km/h",
+            minimum=0.1,
+            maximum=top_kmh,
+            step=0.01,
+            quantity="speed",
+            help="No part of a spray job goes faster than this. The Xbox controller has its own speeds.",
         ),
-        help=(
-            "What a running spray job does when the battery drops below the level below. There's "
-            "always an alert. Resume needs the battery above the level again. Nothing happens until "
-            "the robot reports its battery level."
+        Setting(
+            key="transit_speed_kmh",
+            label="Transit speed",
+            group="Driving",
+            kind="number",
+            default=top_kmh,
+            unit="km/h",
+            minimum=0.1,
+            maximum=top_kmh,
+            step=0.01,
+            quantity="speed",
+            help="Driving to the field, home and back, with the sprayer off. Never more than the maximum speed.",
         ),
-    ),
-    Setting(
-        key="low_battery_percent",
-        label="Low battery level",
-        group="Battery",
-        kind="number",
-        default=20.0,
-        unit="%",
-        minimum=5.0,
-        maximum=80.0,
-        step=1.0,
-        help="Counts as low after 10 s below this, so a short dip under load doesn't.",
-    ),
-    Setting(
-        key="slope_limit_deg",
-        label="Slope limit",
-        group="Slope",
-        kind="number",
-        default=15.0,
-        unit="°",
-        minimum=5.0,
-        maximum=45.0,
-        step=1.0,
-        help=(
-            "A spray job stops if the robot tilts more than this for a second, from the IMU. After "
-            "Resume it doesn't stop again until it has been on level ground, so it can drive off."
+        Setting(
+            key="turn_speed_kmh",
+            label="Turn speed",
+            group="Driving",
+            kind="number",
+            default=min(0.5, top_kmh),
+            unit="km/h",
+            minimum=0.1,
+            maximum=top_kmh,
+            step=0.01,
+            quantity="speed",
+            help="Turning between rows. Never more than the maximum speed.",
         ),
-    ),
-    Setting(
-        key="alert_errors_at_start",
-        label="Errors when starting a job",
-        group="Start checks",
-        kind="choice",
-        default=ALERTS_BLOCK,
-        choices=(
-            (ALERTS_BLOCK, "Don't start"),
-            (ALERTS_ALLOW_ACKNOWLEDGED, "Start if acknowledged"),
+        Setting(
+            key="comms_loss_action",
+            label="If the link is lost",
+            group="Link loss",
+            kind="choice",
+            default=COMMS_CONTINUE,
+            choices=(
+                (COMMS_CONTINUE, "Keep working"),
+                (COMMS_RETURN_HOME, "Return home"),
+                (COMMS_DELAYED_RETURN_HOME, "Keep working, then return home"),
+                (COMMS_STOP, "Stop and wait"),
+            ),
+            help=(
+                "What a running spray job does when no dashboard has been connected for the time below. "
+                "The sprayer is off whenever the robot stops or drives home. After returning home or "
+                "stopping, the job waits for Resume."
+            ),
         ),
-        help=(
-            "Whether a spray job can start while the Robot page shows an error. With the second choice, errors you've acknowledged there show as warnings in the start checks instead, so a known, harmless fault doesn't stop testing. A new or unacknowledged error still stops the start."
+        Setting(
+            key="comms_loss_timeout_s",
+            label="Link counts as lost after",
+            group="Link loss",
+            kind="number",
+            default=30.0,
+            unit="s",
+            minimum=15.0,
+            maximum=600.0,
+            step=1.0,
+            help=(
+                "Shorter dropouts are ignored. It takes about 15 s to notice a dashboard has gone. "
+                "A phone with its screen locked usually counts as disconnected."
+            ),
         ),
-    ),
-)
+        Setting(
+            key="comms_loss_delay_min",
+            label="Return home after",
+            group="Link loss",
+            kind="number",
+            default=5.0,
+            unit="min",
+            minimum=1.0,
+            maximum=120.0,
+            step=1.0,
+            shown_when=("comms_loss_action", COMMS_DELAYED_RETURN_HOME),
+            help="How long the robot keeps working without a link before it drives home.",
+        ),
+        Setting(
+            key="low_battery_action",
+            label="If the battery is low",
+            group="Battery",
+            kind="choice",
+            default=BATTERY_RETURN_HOME,
+            choices=(
+                (BATTERY_WARN, "Only warn"),
+                (BATTERY_RETURN_HOME, "Return home"),
+                (BATTERY_STOP, "Stop and wait"),
+            ),
+            help=(
+                "What a running spray job does when the battery drops below the level below. There's "
+                "always an alert. Resume needs the battery above the level again. Nothing happens until "
+                "the robot reports its battery level."
+            ),
+        ),
+        Setting(
+            key="low_battery_percent",
+            label="Low battery level",
+            group="Battery",
+            kind="number",
+            default=20.0,
+            unit="%",
+            minimum=5.0,
+            maximum=80.0,
+            step=1.0,
+            help="Counts as low after 10 s below this, so a short dip under load doesn't.",
+        ),
+        Setting(
+            key="slope_limit_deg",
+            label="Slope limit",
+            group="Slope",
+            kind="number",
+            default=15.0,
+            unit="°",
+            minimum=5.0,
+            maximum=45.0,
+            step=1.0,
+            help=(
+                "A spray job stops if the robot tilts more than this for a second, from the IMU. After "
+                "Resume it doesn't stop again until it has been on level ground, so it can drive off."
+            ),
+        ),
+        Setting(
+            key="alert_errors_at_start",
+            label="Errors when starting a job",
+            group="Start checks",
+            kind="choice",
+            default=ALERTS_BLOCK,
+            choices=(
+                (ALERTS_BLOCK, "Don't start"),
+                (ALERTS_ALLOW_ACKNOWLEDGED, "Start if acknowledged"),
+            ),
+            help=(
+                "Whether a spray job can start while the Robot page shows an error. With the "
+                "second choice, errors you've acknowledged there show as warnings in the start "
+                "checks instead, so a known, harmless fault doesn't stop testing. A new or "
+                "unacknowledged error still stops the start."
+            ),
+        ),
+    )
 
-BY_KEY = {s.key: s for s in SETTINGS}
+
+# Set by configure(). Empty until then.
+SETTINGS: tuple[Setting, ...] = ()
+BY_KEY: dict[str, Setting] = {}
+_top_kmh: float | None = None
+
+
+def configure(top_speed_kmh: float) -> None:
+    """Sets the robot's top speed in km/h, max_linear_speed in r5's config/limits.yaml, which is the
+    limit and default of the speed settings. Call it before anything else here: job_manager does,
+    from its max_speed_kmh parameter, which dashboard.launch.py fills in from limits.yaml."""
+    global SETTINGS, BY_KEY, _top_kmh
+    if isinstance(top_speed_kmh, bool) or not math.isfinite(top_speed_kmh) or top_speed_kmh < 0.1:
+        raise ValueError(f"The robot's top speed must be at least 0.1 km/h, not {top_speed_kmh!r}.")
+    _top_kmh = float(top_speed_kmh)
+    SETTINGS = _make_settings(_top_kmh)
+    BY_KEY = {s.key: s for s in SETTINGS}
+
+
+def top_speed_kmh() -> float:
+    """The value given to configure()."""
+    if _top_kmh is None:
+        raise RuntimeError("settings.configure() must be called first.")
+    return _top_kmh
 
 
 class SettingsError(ValueError):
@@ -286,10 +314,12 @@ class SettingsError(ValueError):
 
 
 def defaults() -> dict:
+    top_speed_kmh()  # raises if not configured
     return {s.key: s.default for s in SETTINGS}
 
 
 def schema_json() -> str:
+    top_speed_kmh()  # raises if not configured
     return json.dumps([s.to_json() for s in SETTINGS])
 
 

@@ -51,16 +51,16 @@ Setting choice(
 }
 
 Setting speed(
-  std::string key, std::string label, double default_value, std::string help)
+  std::string key, std::string label, double default_value, double top_kmh, std::string help)
 {
   Setting s = number(
     std::move(key), std::move(label), "Driving", default_value, "km/h", 0.1,
-    kHardwareMaxSpeedKmh, 0.01, std::move(help));
+    top_kmh, 0.01, std::move(help));
   s.quantity = "speed";
   return s;
 }
 
-std::vector<Setting> make_settings()
+std::vector<Setting> make_settings(double top_kmh)
 {
   std::vector<Setting> out;
 
@@ -87,16 +87,16 @@ std::vector<Setting> make_settings()
       "For times and dates on the dashboard."));
   out.push_back(
     speed(
-      "max_speed_kmh", "Maximum speed", kHardwareMaxSpeedKmh,
+      "max_speed_kmh", "Maximum speed", top_kmh, top_kmh,
       "No part of a spray job goes faster than this. The Xbox controller has its own speeds."));
   out.push_back(
     speed(
-      "transit_speed_kmh", "Transit speed", kHardwareMaxSpeedKmh,
+      "transit_speed_kmh", "Transit speed", top_kmh, top_kmh,
       "Driving to the field, home and back, with the sprayer off. Never more than the maximum "
       "speed."));
   out.push_back(
     speed(
-      "turn_speed_kmh", "Turn speed", 0.5,
+      "turn_speed_kmh", "Turn speed", std::min(0.5, top_kmh), top_kmh,
       "Turning between rows. Never more than the maximum speed."));
   out.push_back(
     choice(
@@ -268,10 +268,43 @@ Choices time_zone_choices(const fs::path & zoneinfo_dir)
   return out;
 }
 
+namespace
+{
+std::optional<double> & configured_top_kmh()
+{
+  static std::optional<double> top;
+  return top;
+}
+
+std::vector<Setting> & configured_settings()
+{
+  static std::vector<Setting> settings;
+  return settings;
+}
+}  // namespace
+
+void configure(double top_speed_kmh)
+{
+  if (!std::isfinite(top_speed_kmh) || top_speed_kmh < 0.1) {
+    throw std::invalid_argument(
+            "The robot's top speed must be at least 0.1 km/h, not " + g(top_speed_kmh) + ".");
+  }
+  configured_top_kmh() = top_speed_kmh;
+  configured_settings() = make_settings(top_speed_kmh);
+}
+
+double top_speed_kmh()
+{
+  if (!configured_top_kmh()) {
+    throw std::logic_error("settings::configure() must be called first.");
+  }
+  return *configured_top_kmh();
+}
+
 const std::vector<Setting> & all()
 {
-  static const std::vector<Setting> settings = make_settings();
-  return settings;
+  top_speed_kmh();  // Throws if not configured.
+  return configured_settings();
 }
 
 const Setting * find(const std::string & key)

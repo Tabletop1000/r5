@@ -113,6 +113,9 @@ public:
     last_tick_(started_)
   {
     const double save_period_s = declare_parameter("save_period_s", 60.0);
+    // max_linear_speed from r5's config/limits.yaml, in km/h. No default, so it can't drift from
+    // the robot's real limit: dashboard.launch.py always sets it.
+    settings::configure(declare_parameter<double>("max_speed_kmh"));
 
     try {
       stats_ = store_.load();

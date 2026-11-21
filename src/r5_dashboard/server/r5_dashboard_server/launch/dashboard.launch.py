@@ -9,6 +9,8 @@ still Python.
 On the simulator, pass use_sim_time:=true fix_requirement:=any sprayer_stub:=true.
 """
 
+import math
+
 from launch import LaunchDescription
 from launch.actions import DeclareLaunchArgument
 from launch.conditions import IfCondition
@@ -16,6 +18,7 @@ from launch.substitutions import LaunchConfiguration
 from launch_ros.actions import ComposableNodeContainer, Node
 from launch_ros.descriptions import ComposableNode
 from launch_ros.parameter_descriptions import ParameterValue
+from r5_limits import load as load_limits
 
 # Lower-rate copies of frequent topics, for rosbridge and the dashboard's Python nodes. Every
 # message a Python subscriber receives costs CPU, even if it's then thrown away, and rosbridge's
@@ -29,6 +32,12 @@ THROTTLED = [
 ]
 # The dashboard nodes read the copies. job_manager reads the IMU for the slope limit.
 REMAPS = [(topic, copy) for topic, copy, _ in THROTTLED]
+
+
+def top_speed_kmh() -> float:
+    """max_linear_speed from r5's config/limits.yaml, in km/h, rounded down to the Settings page's
+    0.01 km/h steps so the page never offers more than the robot can do."""
+    return math.floor(load_limits()["max_linear_speed"] * 3.6 * 100 + 1e-6) / 100
 
 
 def generate_launch_description():
@@ -58,6 +67,7 @@ def generate_launch_description():
     ]
     fix_requirement = LaunchConfiguration("fix_requirement")
     use_sim_time = LaunchConfiguration("use_sim_time")
+    top_kmh = top_speed_kmh()
 
     # Only reachable from the robot itself. Browsers connect through the dashboard server.
     # Started directly rather than through rosbridge's launch file, which also starts rosapi (about
@@ -124,7 +134,7 @@ def generate_launch_description():
                 package="r5_dashboard_nodes",
                 plugin="r5_dashboard::RobotStatusNode",
                 name="robot_status",
-                parameters=[{"data_dir": data_dir}],
+                parameters=[{"data_dir": data_dir, "max_speed_kmh": top_kmh}],
                 remappings=REMAPS,
             ),
             ComposableNode(
@@ -157,7 +167,14 @@ def generate_launch_description():
         executable="job_manager",
         output="both",
         # Wheel and sprayer values are placeholders until the sprayer is built (spec 5.5).
-        parameters=[{"data_dir": data_dir, "job_fix_requirement": fix_requirement, "use_sim_time": use_sim_time}],
+        parameters=[
+            {
+                "data_dir": data_dir,
+                "job_fix_requirement": fix_requirement,
+                "use_sim_time": use_sim_time,
+                "max_speed_kmh": top_kmh,
+            }
+        ],
         remappings=REMAPS,
     )
 

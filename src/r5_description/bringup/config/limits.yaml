@@ -1,0 +1,24 @@
+# R5's speed and acceleration limits: the one place to change them.
+#
+# The launch files read this file and fill the values into every node that needs them, through
+# $(var <name>) placeholders in their parameter files (see r5_limits/__init__.py):
+#   - diff_drive_controller (diffbot_controllers.yaml), on the robot and in Gazebo
+#   - Nav2's controller and velocity smoother (r5_navigation/params/nav2_params.yaml)
+#   - Xbox controller turbo speeds (r5_bringup/config/joystick.yaml)
+#   - the dashboard's top speed for spray jobs and the Settings page
+# xacro reads it for the wheel joint limits in the URDF.
+#
+# Launch stops with an error if a top speed needs the wheels to turn faster than
+# wheel_max_velocity.
+
+# What the motors can do, in wheel rad/s. With the 0.1 m wheels, 6 rad/s is 0.6 m/s.
+wheel_max_velocity: 6.0
+
+# Top speeds of the robot as a whole.
+max_linear_speed: 0.6  # m/s, forwards and backwards (2.16 km/h)
+max_angular_speed: 1.0  # rad/s, turning on the spot
+
+# Hardest the controller will speed up or brake. Nav2's velocity smoother uses its own gentler
+# linear acceleration (nav2_params.yaml).
+max_linear_accel: 1.0  # m/s²
+max_angular_accel: 1.0  # rad/s²

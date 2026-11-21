@@ -9,6 +9,8 @@
   <xacro:arg name="prefix" default=""/>
   <xacro:arg name="use_gazebo" default="false"/>
   <xacro:arg name="use_mock_hardware" default="false" />
+  <!-- For Gazebo: diffbot_controllers.yaml with the limits filled in (r5_limits.fill). -->
+  <xacro:arg name="controllers_file" default="$(find r5)/config/diffbot_controllers.yaml" />
 
   <xacro:include filename="$(find r5)/urdf/sensors/lidar.urdf.xacro" />
   <xacro:include filename="$(find r5)/urdf/sensors/imu.urdf.xacro"/>

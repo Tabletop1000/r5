@@ -1,3 +1,6 @@
+import os
+
+from ament_index_python.packages import get_package_share_directory
 from launch import LaunchDescription
 from launch.actions import (
     DeclareLaunchArgument,
@@ -17,6 +20,7 @@ from launch.substitutions import (
 from launch_ros.actions import Node
 from launch_ros.parameter_descriptions import ParameterValue
 from launch_ros.substitutions import FindPackageShare
+from r5_limits import fill
 
 
 # ros2_control_node isn't started because Gazebo runs the controller manager itself.
@@ -45,8 +49,10 @@ def generate_launch_description():
     bridge_config = PathJoinSubstitution(
         [FindPackageShare("r5_simulation"), "config", "gz_bridge.yaml"]
     )
-    robot_controllers = PathJoinSubstitution(
-        [FindPackageShare("r5"), "config", "diffbot_controllers.yaml"]
+    # With the speed limits from r5's config/limits.yaml filled in. gz_ros2_control reads it too,
+    # through the URDF's controllers_file argument.
+    robot_controllers = fill(
+        os.path.join(get_package_share_directory("r5"), "config", "diffbot_controllers.yaml")
     )
     navsat_params = PathJoinSubstitution(
         [FindPackageShare("r5_simulation"), "config", "navsat_sim.yaml"]
@@ -58,6 +64,9 @@ def generate_launch_description():
             PathJoinSubstitution([FindPackageShare("r5"), "urdf", "r5.urdf.xacro"]),
             " ",
             "use_gazebo:=true",
+            " ",
+            "controllers_file:=",
+            robot_controllers,
         ]
     )
 

@@ -86,6 +86,7 @@ install(TARGETS r5 motornode_console
 if(BUILD_TESTING)
   find_package(ament_cmake_pytest REQUIRED)
   ament_add_pytest_test(r5_urdf_xacro test/test_urdf_xacro.py)
+  ament_add_pytest_test(r5_limits test/test_limits.py)
 
   # Integration (launch) tests
   find_package(ament_cmake_ros REQUIRED)
@@ -97,6 +98,10 @@ if(BUILD_TESTING)
   add_ros_isolated_launch_test(test/test_view_robot_launch.py)
   add_ros_isolated_launch_test(test/test_diffbot_launch.py)
 endif()
+
+# r5_limits: fills config/limits.yaml into parameter files for the launch files.
+find_package(ament_cmake_python REQUIRED)
+ament_python_install_package(r5_limits)
 
 ## EXPORTS
 ament_export_targets(export_r5 HAS_LIBRARY_TARGET)

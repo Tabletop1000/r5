@@ -1,3 +1,6 @@
+import os
+
+from ament_index_python.packages import get_package_share_directory
 from launch import LaunchDescription
 from launch.actions import DeclareLaunchArgument
 from launch.conditions import IfCondition
@@ -5,6 +8,7 @@ from launch.substitutions import LaunchConfiguration, PathJoinSubstitution
 
 from launch_ros.actions import Node
 from launch_ros.substitutions import FindPackageShare
+from r5_limits import fill
 
 
 # Velocity commands go through twist_mux, so Nav2, the dashboard and the Xbox controller can't
@@ -12,6 +16,10 @@ from launch_ros.substitutions import FindPackageShare
 def generate_launch_description():
     joystick = LaunchConfiguration("joystick")
     config = PathJoinSubstitution([FindPackageShare("r5_bringup"), "config"])
+    # Turbo speeds are the top speeds from r5's config/limits.yaml.
+    joystick_params = fill(
+        os.path.join(get_package_share_directory("r5_bringup"), "config", "joystick.yaml")
+    )
 
     declared_arguments = [
         DeclareLaunchArgument(
@@ -33,7 +41,7 @@ def generate_launch_description():
         executable="joy_node",
         name="joy_node",
         output="both",
-        parameters=[PathJoinSubstitution([config, "joystick.yaml"])],
+        parameters=[joystick_params],
         condition=IfCondition(joystick),
     )
     teleop_twist_joy_node = Node(
@@ -41,7 +49,7 @@ def generate_launch_description():
         executable="teleop_node",
         name="teleop_twist_joy_node",
         output="both",
-        parameters=[PathJoinSubstitution([config, "joystick.yaml"])],
+        parameters=[joystick_params],
         remappings=[("cmd_vel", "/mux/joy")],
         condition=IfCondition(joystick),
     )
