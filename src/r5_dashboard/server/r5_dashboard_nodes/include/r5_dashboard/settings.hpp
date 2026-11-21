@@ -39,6 +39,9 @@ inline constexpr const char * kBatteryWarn = "warn";
 inline constexpr const char * kBatteryReturnHome = "return_home";
 inline constexpr const char * kBatteryStop = "stop";
 
+inline constexpr const char * kAlertsBlock = "block";
+inline constexpr const char * kAlertsAllowAcknowledged = "allow_acknowledged";
+
 inline constexpr const char * kUnitsMetric = "metric";
 inline constexpr const char * kUnitsUs = "us";
 

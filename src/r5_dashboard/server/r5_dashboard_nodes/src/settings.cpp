@@ -138,6 +138,15 @@ std::vector<Setting> make_settings()
       "slope_limit_deg", "Slope limit", "Slope", 15.0, "°", 5.0, 45.0, 1.0,
       "A spray job stops if the robot tilts more than this for a second, from the IMU. After "
       "Resume it doesn't stop again until it has been on level ground, so it can drive off."));
+  out.push_back(
+    choice(
+      "alert_errors_at_start", "Errors when starting a job", "Start checks", kAlertsBlock,
+      {{kAlertsBlock, "Don't start"},
+        {kAlertsAllowAcknowledged, "Start if acknowledged"}},
+      "Whether a spray job can start while the Robot page shows an error. With the second "
+      "choice, errors you've acknowledged there show as warnings in the start checks instead, so "
+      "a known, harmless fault doesn't stop testing. A new or unacknowledged error still stops the "
+      "start."));
   return out;
 }
 

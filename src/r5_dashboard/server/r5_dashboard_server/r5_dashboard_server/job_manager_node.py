@@ -58,7 +58,7 @@ from .fields import FIX_NAMES, REQUIREMENTS, FieldStore, fix_quality
 from .job import Affine2D, Episode, Tank, along_track, angle_difference, extend_line, flow_for_speed, heading, sprayer_should_be_on, tilt_deg
 from .listener import Listener
 from .settings import BATTERY_LOW, BATTERY_STOP, BATTERY_WARN, LINK_LOST, TOO_STEEP, values_from_json
-from .settings import COMMS_CONTINUE, COMMS_DELAYED_RETURN_HOME, COMMS_STOP
+from .settings import ALERTS_ALLOW_ACKNOWLEDGED, COMMS_CONTINUE, COMMS_DELAYED_RETURN_HOME, COMMS_STOP
 from .settings import defaults as settings_defaults
 from .units import format_area, format_volume
 from .shutdown import init_without_signal_handlers
@@ -182,6 +182,7 @@ class JobManagerNode(Node):
         self.speed = 0.0
         self.battery: float | None = None
         self.alert_errors: list[str] = []
+        self.unacknowledged_errors: list[str] = []
         # Frequent topics, on their own single-threaded node (see listener.py). The odometry
         # topics are remapped to lower-rate copies in dashboard.launch.py.
         self.listener = Listener("job_manager_listener")
@@ -282,7 +283,9 @@ class JobManagerNode(Node):
         self.slope_episode.update(self.tilt > limit, self.tilt < limit - SLOPE_MARGIN, time.monotonic())
 
     def on_alerts(self, msg: AlertArray) -> None:
-        self.alert_errors = [f"{a.source}: {a.message}" for a in msg.alerts if a.severity >= 2]
+        errors = [a for a in msg.alerts if a.severity >= 2]
+        self.alert_errors = [f"{a.source}: {a.message}" for a in errors]
+        self.unacknowledged_errors = [f"{a.source}: {a.message}" for a in errors if not a.acknowledged]
 
     def on_client_count(self, msg: Int32) -> None:
         if msg.data > 0:
@@ -435,13 +438,7 @@ class JobManagerNode(Node):
             ok = self.battery >= self.min_battery
             out.append(check(Check.OK if ok else Check.FAIL, "Battery", f"{self.battery:.0f}% (needs {self.min_battery:.0f}%)"))
 
-        out.append(
-            check(
-                Check.FAIL if self.alert_errors else Check.OK,
-                "Alerts",
-                "; ".join(self.alert_errors[:3]) if self.alert_errors else "No errors",
-            )
-        )
+        out.append(self.alerts_check())
 
         if plan is not None and self.fix is not None and q >= 0:
             start = plan.sections[0].points[0]
@@ -458,6 +455,16 @@ class JobManagerNode(Node):
         if self.sprayer_placeholder:
             out.append(check(Check.WARNING, "Sprayer", "Placeholder interface: no sprayer hardware is fitted yet"))
         return out
+
+    def alerts_check(self) -> Check:
+        """Errors on the Robot page stop a start, unless the user allows acknowledged ones."""
+        if not self.alert_errors:
+            return check(Check.OK, "Alerts", "No errors")
+        allow = self.robot_settings["alert_errors_at_start"] == ALERTS_ALLOW_ACKNOWLEDGED
+        if allow and not self.unacknowledged_errors:
+            return check(Check.WARNING, "Alerts", "Acknowledged, allowed by Settings: " + "; ".join(self.alert_errors[:3]))
+        blocking = self.unacknowledged_errors if allow else self.alert_errors
+        return check(Check.FAIL, "Alerts", "; ".join(blocking[:3]))
 
     def on_plan(self, request, response):
         s = settings_from_msg(request.settings)

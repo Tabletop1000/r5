@@ -31,6 +31,9 @@ BATTERY_WARN = "warn"
 BATTERY_RETURN_HOME = "return_home"
 BATTERY_STOP = "stop"
 
+ALERTS_BLOCK = "block"
+ALERTS_ALLOW_ACKNOWLEDGED = "allow_acknowledged"
+
 UNITS_METRIC = "metric"
 UNITS_US = "us"
 
@@ -257,6 +260,20 @@ SETTINGS: tuple[Setting, ...] = (
         help=(
             "A spray job stops if the robot tilts more than this for a second, from the IMU. After "
             "Resume it doesn't stop again until it has been on level ground, so it can drive off."
+        ),
+    ),
+    Setting(
+        key="alert_errors_at_start",
+        label="Errors when starting a job",
+        group="Start checks",
+        kind="choice",
+        default=ALERTS_BLOCK,
+        choices=(
+            (ALERTS_BLOCK, "Don't start"),
+            (ALERTS_ALLOW_ACKNOWLEDGED, "Start if acknowledged"),
+        ),
+        help=(
+            "Whether a spray job can start while the Robot page shows an error. With the second choice, errors you've acknowledged there show as warnings in the start checks instead, so a known, harmless fault doesn't stop testing. A new or unacknowledged error still stops the start."
         ),
     ),
 )
