@@ -168,8 +168,8 @@ These robot-side items decide how well it works on the real robot:
   robot's actual ground speed, so the rate per m² holds when it slows down. Then set
   `job_manager`'s `sprayer_is_placeholder` to false and its boom width, tank and pump limits.
 - [ ] **Tank level sensor (later).** Liquid is estimated from flow × time today.
-- [ ] **Turning radius.** `job_manager`'s `turn_radius_m` (1.0 m) shapes the planned turns. For a
-  skid-steer robot that can pivot, smaller is possible, but the controller must be able to follow it.
+- [ ] **Turning radius.** The Settings page's Turning radius (default 1.0 m) shapes the planned turns. For a
+  skid-steer robot that can pivot, 0 turns on the spot; check Nav2 follows the short straight turns.
 - [ ] **Battery minimum.** Jobs are refused below `min_battery_percent` (30%) once `/battery_state`
   is published; until then the check is a warning.
 - [ ] **Route home.** Trips home use `NavigateToPose` with the global costmap, which has no

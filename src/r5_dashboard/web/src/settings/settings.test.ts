@@ -78,6 +78,18 @@ describe('the settings form', () => {
     expect(checkSetting(schema[0], 'x'.repeat(21))).toEqual({ error: 'Nickname can be at most 20 characters.' });
     expect(checkSetting(schema[2], 'panic')).toEqual({ error: 'Choose a value for If the link is lost.' });
   });
+
+  it('shows lengths in feet in US units and stores metres', () => {
+    const radius: SettingDescription = {
+      key: 'turn_radius_m', label: 'Turning radius', group: 'Driving', kind: 'number', default: 1, help: '', unit: 'm',
+      minimum: 0, maximum: 10, quantity: 'length',
+    };
+    expect(checkSetting(radius, '0')).toEqual({ value: 0 });
+    const tenFeet = checkSetting(radius, '10', 'us');
+    expect('value' in tenFeet && tenFeet.value).toBeCloseTo(3.048);
+    expect(checkSetting(radius, '40', 'us')).toEqual({ error: 'Turning radius can be at most 32.8 ft.' });
+    expect(formFromValues([radius], { turn_radius_m: 3.048 }, 'us').turn_radius_m).toBe('10');
+  });
 });
 
 describe('linkLossText', () => {

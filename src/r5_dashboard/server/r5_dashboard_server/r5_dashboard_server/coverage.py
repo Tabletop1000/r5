@@ -9,7 +9,8 @@ planner take several seconds each on a 4 ha field (more on the robot's computer)
 
 - The best row direction is the one across which the field is narrowest (fewest rows), found
   directly from the outline.
-- Within each cell, rows go back and forth with a Dubins turn between neighbours.
+- Within each cell, rows go back and forth with a Dubins turn between neighbours, or a straight
+  line when the turning radius is 0 (the robot turns on the spot at each end).
 - Cells (made by keep-outs or a concave outline) are visited nearest first. Each join is a direct
   turn if that stays inside the field and clear of keep-outs, otherwise it follows the headland
   near the field edge. If neither is clear, Fields2Cover's full route planner is used instead.
@@ -48,7 +49,7 @@ class RobotLimits:
     max_speed_kmh: float = 1.08  # job_manager sets it from r5's config/limits.yaml
     pump_max_flow_l_min: float = 10.0
     tank_reserve_fraction: float = 0.05
-    turn_radius_m: float = 1.0
+    turn_radius_m: float = 1.0  # Turning radius (Settings page). 0 turns on the spot.
     # Nav2's xy_goal_tolerance. Swaths are extended past their ends by this much plus a margin, so
     # the controller doesn't stop short of the end of a row.
     goal_tolerance_m: float = 1.5
@@ -280,7 +281,14 @@ def _rows_of(f2c, swaths) -> list[tuple[XY, XY]]:
     return rows
 
 
+# Below this turning radius, turns are straight lines and the robot turns on the spot.
+MIN_CURVE_RADIUS_M = 0.05
+
+
 def _turn(f2c, robot, dubins, start: XY, start_heading: float, end: XY, end_heading: float) -> list[tuple[int, XY, XY]]:
+    """A Dubins turn, or with dubins None a straight line (the robot turns on the spot at each end)."""
+    if dubins is None:
+        return [(TURN, start, end)]
     path = dubins.createTurn(robot, f2c.Point(*start), start_heading % (2 * math.pi), f2c.Point(*end), end_heading % (2 * math.pi))
     return [(TURN, s, e) for _, s, e in _path_points(f2c, path)]
 
@@ -293,9 +301,9 @@ class _NeedsFullPlanner(Exception):
     pass
 
 
-def _route_cells(f2c, robot, swaths_by_cells, ring: list[XY], obstacles: _Obstacles) -> list[Section]:
+def _route_cells(f2c, robot, swaths_by_cells, ring: list[XY], obstacles: _Obstacles, curved: bool = True) -> list[Section]:
     """Visit cells nearest first, back and forth within each (see module notes)."""
-    dubins = f2c.PP_DubinsCurves()
+    dubins = f2c.PP_DubinsCurves() if curved else None
     cells = [_rows_of(f2c, swaths_by_cells.at(i)) for i in range(swaths_by_cells.size())]
     cells = [c for c in cells if c]
     states: list[tuple[int, XY, XY]] = []
@@ -349,7 +357,8 @@ def plan_coverage(
         )
 
     robot = f2c.Robot(width, width)
-    robot.setMinTurningRadius(limits.turn_radius_m)
+    # Fields2Cover's own planner (the fallback below) needs a curve, so it gets a tiny one.
+    robot.setMinTurningRadius(max(limits.turn_radius_m, MIN_CURVE_RADIUS_M))
     hg = f2c.HG_Const_gen()
     try:
         inner = hg.generateHeadlands(cells, headland) if headland > 0 else cells
@@ -371,7 +380,8 @@ def plan_coverage(
                 for i in range(ring_cells.getExteriorRing().size() - 1)]
         zones = [[proj.to_xy(p) for p in z] for z in fld.keep_out]
         try:
-            sections = _route_cells(f2c, robot, swaths, ring, _Obstacles(outer, zones, width / 2))
+            curved = limits.turn_radius_m >= MIN_CURVE_RADIUS_M
+            sections = _route_cells(f2c, robot, swaths, ring, _Obstacles(outer, zones, width / 2), curved)
         except _NeedsFullPlanner:
             route = f2c.RP_RoutePlannerBase().genRoute(route_ring, swaths)
             path = f2c.PP_PathPlanning().planPath(robot, route, f2c.PP_DubinsCurves())

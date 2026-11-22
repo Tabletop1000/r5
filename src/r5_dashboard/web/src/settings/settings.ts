@@ -1,7 +1,7 @@
 // Robot settings. The robot describes each setting (r5_dashboard_server/settings.py) and the
 // Settings page builds its form from the descriptions, so a new setting needs no change here.
 
-import { inputNumber, speed, type Units } from '../display/units';
+import { inputNumber, length, speed, type Units } from '../display/units';
 import type { RobotSettingsMsg } from '../ros/topics';
 
 export const DEFAULT_ROBOT_NAME = 'R5';
@@ -21,21 +21,27 @@ export interface SettingDescription {
   choices?: { value: string; label: string }[];
   /** Only shown while another setting has this value. */
   shown_when?: { key: string; value: string };
-  /** "speed": stored in km/h, shown in the chosen units. */
+  /** "speed": stored in km/h, "length": stored in metres. Both are shown in the chosen units. */
   quantity?: string;
 }
 
 /** The unit to show a setting in. */
 export function displayUnit(s: SettingDescription, u: Units): string {
-  return s.quantity === 'speed' ? speed.unit(u) : s.unit;
+  if (s.quantity === 'speed') return speed.unit(u);
+  if (s.quantity === 'length') return length.unit(u);
+  return s.unit;
 }
 
 function toDisplay(s: SettingDescription, value: number, u: Units): number {
-  return s.quantity === 'speed' ? speed.fromKmh(value, u) : value;
+  if (s.quantity === 'speed') return speed.fromKmh(value, u);
+  if (s.quantity === 'length') return length.fromM(value, u);
+  return value;
 }
 
 function fromDisplay(s: SettingDescription, value: number, u: Units): number {
-  return s.quantity === 'speed' ? speed.toKmh(value, u) : value;
+  if (s.quantity === 'speed') return speed.toKmh(value, u);
+  if (s.quantity === 'length') return length.toM(value, u);
+  return value;
 }
 
 export type SettingValues = Record<string, number | string>;

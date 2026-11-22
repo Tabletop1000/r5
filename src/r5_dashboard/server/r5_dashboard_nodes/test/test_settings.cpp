@@ -53,6 +53,7 @@ TEST(Settings, SchemaIsJsonThePageCanRead)
   }
   EXPECT_EQ(by_key["max_speed_kmh"]["maximum"], kTopKmh);
   EXPECT_EQ(by_key["max_speed_kmh"]["quantity"], "speed");
+  EXPECT_EQ(by_key["turn_radius_m"]["quantity"], "length");
   const Json stop = {{"value", s::kCommsStop}, {"label", "Stop and wait"}};
   const auto & choices = by_key["comms_loss_action"]["choices"];
   EXPECT_NE(std::find(choices.begin(), choices.end(), stop), choices.end());

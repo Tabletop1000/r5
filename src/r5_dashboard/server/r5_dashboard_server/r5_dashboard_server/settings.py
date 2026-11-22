@@ -71,8 +71,8 @@ class Setting:
     choices: tuple[tuple[str, str], ...] = ()
     # (key, value): the page only shows this setting while that setting has that value.
     shown_when: tuple[str, str] | None = None
-    # "speed" for a value in km/h that the page shows in the chosen units. The value, minimum and
-    # maximum are always stored in km/h.
+    # "speed" for a value in km/h, or "length" for one in metres, that the page shows in the chosen
+    # units. The value, minimum and maximum are always stored in km/h or metres.
     quantity: str = ""
 
     def to_json(self) -> dict:
@@ -173,6 +173,19 @@ def _make_settings(top_kmh: float) -> tuple[Setting, ...]:
             step=0.01,
             quantity="speed",
             help="Turning between rows. Never more than the maximum speed.",
+        ),
+        Setting(
+            key="turn_radius_m",
+            label="Turning radius",
+            group="Driving",
+            kind="number",
+            default=1.0,
+            unit="m",
+            minimum=0.0,
+            maximum=10.0,
+            step=0.1,
+            quantity="length",
+            help="The tightest turn the robot makes between rows. 0 turns on the spot. Set it for a chassis that can't turn on the spot, or for gentler turns. A wider turn needs a wider headland.",
         ),
         Setting(
             key="comms_loss_action",

@@ -70,8 +70,8 @@ struct Setting
   Choices choices;
   // (key, value): the page only shows this setting while that setting has that value.
   std::optional<std::pair<std::string, std::string>> shown_when;
-  // "speed" for a value in km/h that the page shows in the chosen units. The value, minimum and
-  // maximum are always stored in km/h.
+  // "speed" for a value in km/h, or "length" for one in metres, that the page shows in the chosen
+  // units. The value, minimum and maximum are always stored in km/h or metres.
   std::string quantity;
 
   Json to_json() const;

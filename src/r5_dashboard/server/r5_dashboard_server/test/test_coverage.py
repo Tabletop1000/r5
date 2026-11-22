@@ -147,3 +147,19 @@ def test_errors_use_the_chosen_units():
         plan_coverage(field(), settings(speed_kmh=1.05), RobotLimits(max_speed_kmh=1.0), units="us")
     with pytest.raises(PlanError, match=r"gal/min"):
         plan_coverage(field(), settings(application_rate_l_per_m2=0.2), RobotLimits(pump_max_flow_l_min=2.5), units="us")
+
+
+def test_turning_on_the_spot_makes_straight_turns():
+    curved = plan_coverage(field(), settings(), RobotLimits(turn_radius_m=1.0))
+    on_spot = plan_coverage(field(), settings(), RobotLimits(turn_radius_m=0.0))
+    assert on_spot.swath_count == curved.swath_count
+    turns = [sec for sec in on_spot.sections if sec.kind == TURN]
+    assert turns and all(len(sec.points) == 2 for sec in turns)
+    # Straight across to the next row, one boom width over.
+    assert all(sec.length == pytest.approx(1.5, abs=0.2) for sec in turns)
+    assert on_spot.path_length_m < curved.path_length_m
+
+
+def test_wider_turning_radius_warns_about_the_headland():
+    assert not any("narrow" in w for w in plan_coverage(field(headland=2.0), settings(), RobotLimits(turn_radius_m=0.0)).warnings)
+    assert any("narrow" in w for w in plan_coverage(field(headland=2.0), settings(), RobotLimits(turn_radius_m=3.0)).warnings)

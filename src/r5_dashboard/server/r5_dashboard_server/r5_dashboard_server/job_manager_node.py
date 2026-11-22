@@ -154,7 +154,6 @@ class JobManagerNode(Node):
             max_speed_kmh=top_kmh,
             pump_max_flow_l_min=float(p("pump_max_flow_l_min", 10.0)),
             tank_reserve_fraction=float(p("tank_reserve_fraction", 0.05)),
-            turn_radius_m=float(p("turn_radius_m", 1.0)),
             goal_tolerance_m=float(p("goal_tolerance_m", 1.5)),
             travel_speed_mps=float(p("travel_speed_mps", top_kmh / 3.6)),
         )
@@ -331,6 +330,7 @@ class JobManagerNode(Node):
             max_speed_kmh=self.max_speed_kmh(),
             travel_speed_mps=self.setting_speed_mps("transit_speed_kmh"),
             turn_speed_mps=self.setting_speed_mps("turn_speed_kmh"),
+            turn_radius_m=float(self.robot_settings["turn_radius_m"]),
         )
 
     def units(self) -> str:

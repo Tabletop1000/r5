@@ -71,3 +71,5 @@ def test_time_zones():
 def test_new_speed_settings_are_unit_aware():
     for key in ("max_speed_kmh", "transit_speed_kmh", "turn_speed_kmh"):
         assert BY_KEY[key].to_json()["quantity"] == "speed"
+    assert BY_KEY["turn_radius_m"].to_json()["quantity"] == "length"
+    assert check_changes({"turn_radius_m": 0.0}) == {"turn_radius_m": 0.0}

@@ -98,6 +98,12 @@ std::vector<Setting> make_settings(double top_kmh)
     speed(
       "turn_speed_kmh", "Turn speed", std::min(0.5, top_kmh), top_kmh,
       "Turning between rows. Never more than the maximum speed."));
+  Setting radius = number(
+    "turn_radius_m", "Turning radius", "Driving", 1.0, "m", 0.0, 10.0, 0.1,
+    "The tightest turn the robot makes between rows. 0 turns on the spot. Set it for a chassis "
+    "that can't turn on the spot, or for gentler turns. A wider turn needs a wider headland.");
+  radius.quantity = "length";
+  out.push_back(radius);
   out.push_back(
     choice(
       "comms_loss_action", "If the link is lost", "Link loss", kCommsContinue,
