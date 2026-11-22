@@ -1093,6 +1093,23 @@ a.button.primary {
   box-shadow: 0 0 0 3px color-mix(in srgb, var(--bad) 30%, transparent);
 }
 
+.stop-button.resume {
+  background: var(--good);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--good) 30%, transparent);
+}
+
+.stop-button:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+  box-shadow: none;
+}
+
+.stop-error {
+  align-self: center;
+  color: var(--bad);
+  font-size: 0.85rem;
+}
+
 .form select {
   font: inherit;
   font-weight: 400;

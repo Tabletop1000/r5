@@ -105,7 +105,7 @@ dependencies with the usual `rosdep` command (see the `r5` repository's `doc/dev
 | `server` | HTTPS, login, web app, WebSocket proxy |
 | `robot_status` (C++) | Operating hours, distance, service schedule (`/r5/stats`); active alerts from `/diagnostics_agg` and its own checks (`/r5/alerts`); services to record a service and acknowledge an alert; the robot settings (`/r5/settings`, `/r5/settings/set`) |
 | `motor_test` (C++) | `/r5/motor_test` action: drives one side or both slowly for 2 s and checks the wheel speeds. Speed and time are fixed on the robot. |
-| `job_manager` (Python) | Plans area spray jobs with Fields2Cover and runs them with Nav2: `FollowPath` for rows and turns, `NavigateToPose` to the start and home. Switches the sprayer by position along each row, estimates the tank, drives home to refill, and handles pause, resume and the software stop (`/r5/stop`), which holds zero velocity on `twist_mux`'s top-priority input for 2 s. Its parameters (boom width, tank, pump, speeds, turn radius, Nav2 goal tolerance, checks) are listed at the top of `job_manager_node.py`. |
+| `job_manager` (Python) | Plans area spray jobs with Fields2Cover and runs them with Nav2: `FollowPath` for rows and turns, `NavigateToPose` to the start and home. Switches the sprayer by position along each row, estimates the tank, drives home to refill, and handles pause, resume and the software stop (`/r5/stop`; `/r5/halt` for the STOP button pauses a job instead of ending it), which holds zero velocity on `twist_mux`'s top-priority input for 2 s. Its parameters (boom width, tank, pump, speeds, turn radius, Nav2 goal tolerance, checks) are listed at the top of `job_manager_node.py`. |
 | `sprayer_stub` (C++) | Optional stand-in for the sprayer: logs `/r5/sprayer/enable` and `/r5/sprayer/flow_setpoint` |
 | `field_manager` (C++) | Stores fields and the home point; records a boundary from `/fix` while the robot is driven. Recording can also be started and stopped by holding controller button 3 (Y on an Xbox controller) for a second (`joy_record_button`, `joy_hold_s` parameters). |
 
@@ -253,7 +253,7 @@ robot yet show "Not available"; [TODO_ROBOT.md](TODO_ROBOT.md) lists them.
 | Spray jobs | `/r5/job/defaults`, `plan`, `start`, `pause`, `resume` services; `/r5/job/status`, `/r5/job/plan` topics; `/r5/stop` | `job_manager` (uses Nav2 `/follow_path`, `/navigate_to_pose`, `/speed_limit` and robot_localization `/fromLL`) |
 | Sprayer | `/r5/sprayer/enable`, `/r5/sprayer/flow_setpoint` | Published by `job_manager`; placeholder until the sprayer exists |
 | Boundary recording | `/r5/recording/start`, `stop`, `clear`, `/r5/recording/status` | `field_manager` (reads `/fix`, `/navpvt`, `/joy`) |
-| Current action, STOP | `/r5/job/status`, `/r5/stop`, `/r5/dashboard/odometry/local` | `job_manager` |
+| Current action, STOP/RESUME | `/r5/job/status`, `/r5/halt`, `/r5/job/resume`, `/r5/dashboard/odometry/local` | `job_manager` |
 
 Topics under `/r5/dashboard/` are lower-rate copies made by `dashboard.launch.py`, at 5 Hz, or 10 Hz
 for `/odometry/global`. The full-rate topics cost too much CPU on the Raspberry Pi: rosbridge's

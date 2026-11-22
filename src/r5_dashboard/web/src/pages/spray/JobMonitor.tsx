@@ -108,7 +108,7 @@ export function JobMonitor({ status, onDone }: { status: JobStatus; onDone: () =
             )}
             {!ended && (
               <button type="button" className="danger" disabled={offline} onClick={() => void call(SERVICES.stop)}>
-                Stop job
+                End job
               </button>
             )}
             {ended && (

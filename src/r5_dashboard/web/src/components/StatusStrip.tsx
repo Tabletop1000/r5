@@ -1,7 +1,8 @@
 import { useEffect, useState, type ReactNode } from 'react';
+import { ConfirmDialog } from './ConfirmDialog';
 import { useNow } from '../hooks/useNow';
 import { useLinkState, useRobot, useTopic } from '../ros/RobotContext';
-import { JOB_ACTIVE, SERVICES, TOPICS, type AlertArray, type BatteryState, type JobStatus, type Odometry, type TriggerResponse } from '../ros/topics';
+import { JOB_ACTIVE, JOB_STATE, SERVICES, TOPICS, type AlertArray, type BatteryState, type JobStatus, type TriggerResponse } from '../ros/topics';
 import { linkLossText } from '../settings/settings';
 import { useRobotName, useSettings } from '../settings/useSettings';
 import { batteryPercent, countAlerts, formatAge, isStale } from '../status';
@@ -26,12 +27,6 @@ export function StatusStrip() {
 
   const jobTopic = useTopic<JobStatus>(TOPICS.jobStatus);
   const job = jobTopic.message;
-  const odom = useTopic<Odometry>(TOPICS.odometryLocal);
-  const moving =
-    odom.message !== null &&
-    !isStale(odom.receivedAt, now) &&
-    (Math.abs(odom.message.twist.twist.linear.x) > 0.03 || Math.abs(odom.message.twist.twist.angular.z) > 0.05);
-  const showStop = link.status === 'connected' && ((job !== null && JOB_ACTIVE.has(job.state)) || moving);
   const percent = batteryPercent(battery.message);
   const alerts = countAlerts(alertList.message);
   const alertTotal = alerts.errors + alerts.warnings;
@@ -77,28 +72,77 @@ export function StatusStrip() {
                 .filter(Boolean)
                 .join(', ')}
       </StatusItem>
-      {showStop && <StopButton />}
+      <StopButton job={job} />
     </header>
   );
 }
 
-/** Always shown while a job runs or the robot moves (spec NAV-4). No confirmation: it must be quick. */
-function StopButton() {
+/**
+ * Always shown, so it's never a surprise where it is (spec NAV-4). STOP needs no confirmation: it must
+ * be quick. During a job it pauses the job (/r5/halt), and the button becomes RESUME, which does ask
+ * first because it sets the robot moving again.
+ */
+function StopButton({ job }: { job: JobStatus | null }) {
   const robot = useRobot();
+  const link = useLinkState();
   const [state, setState] = useState<'idle' | 'sending' | 'failed'>('idle');
-  async function stop() {
+  const [confirming, setConfirming] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const offline = link.status !== 'connected';
+  const paused = !offline && job !== null && job.state === JOB_STATE.PAUSED;
+
+  async function send(service: { name: string; type: string }, request: object) {
     setState('sending');
+    setError(null);
     try {
-      const resp = await robot.callService<object, TriggerResponse>(SERVICES.stop, {}, 3000);
+      const resp = await robot.callService<object, TriggerResponse>(service, request, 3000);
       setState(resp.success ? 'idle' : 'failed');
-    } catch {
+      if (!resp.success) setError(resp.message);
+    } catch (err) {
       setState('failed');
+      setError((err as Error).message);
     }
   }
+
+  if (paused) {
+    return (
+      <>
+        <button type="button" className="stop-button resume" onClick={() => setConfirming(true)} disabled={state === 'sending'}>
+          {state === 'sending' ? 'Resuming…' : 'RESUME'}
+        </button>
+        <ConfirmDialog
+          open={confirming}
+          title="Resume the job?"
+          confirmLabel="Resume"
+          onConfirm={() => {
+            setConfirming(false);
+            void send(SERVICES.resumeJob, { tank_refilled: false });
+          }}
+          onCancel={() => setConfirming(false)}
+        >
+          <p>
+            The robot will start moving again and carry on {job.field_name ? `spraying ${job.field_name}` : 'with the job'}.
+            Check the area around it is clear.
+          </p>
+          {job.message && <p className="muted">{job.message}</p>}
+        </ConfirmDialog>
+        {error && <span className="stop-error" role="alert">{error}</span>}
+      </>
+    );
+  }
   return (
-    <button type="button" className="stop-button" onClick={() => void stop()} disabled={state === 'sending'}>
-      {state === 'sending' ? 'Stopping…' : state === 'failed' ? 'Stop failed — try again' : 'STOP'}
-    </button>
+    <>
+      <button
+        type="button"
+        className="stop-button"
+        onClick={() => void send(SERVICES.halt, {})}
+        disabled={offline || state === 'sending'}
+        title={offline ? 'Not connected to the robot' : 'Stop the robot now. A job is paused and can be resumed.'}
+      >
+        {state === 'sending' ? 'Stopping…' : state === 'failed' ? 'Stop failed — try again' : 'STOP'}
+      </button>
+      {error && <span className="stop-error" role="alert">{error}</span>}
+    </>
   );
 }
 

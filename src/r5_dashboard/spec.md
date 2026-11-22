@@ -64,8 +64,10 @@ the robot's health.
 - **NAV-2** Only one page is shown at a time. The current page is highlighted in the menu.
 - **NAV-3** A status strip is always visible showing: connection state, battery %, current action,
   and active alert count. **[Proposed]**
-- **NAV-4** A **Stop** button is always visible while the robot is moving or running a job. It cancels
-  the active job and commands zero velocity. **[Proposed — strongly recommended for safety]**
+- **NAV-4** A big red **STOP** button is always visible at the top of every page (greyed out while
+  disconnected). It cancels all navigation, turns the sprayer off and commands zero velocity, with no
+  confirmation. A running job is paused rather than ended, and the button becomes **RESUME**, which
+  asks for confirmation before the robot moves again. The job page's **End job** ends the job.
 - **NAV-5** Spray in the menu opens Area Spray. Spot Spray is reached from a tab or toggle on the
   Spray page and shows "Coming soon" in v1.
 - **NAV-6** Mow shows "Coming soon" in v1.
@@ -299,7 +301,8 @@ the `r5` workspace yet.
 | `/r5/job/run` | action | Run a job; feedback is progress |
 | `/r5/job/pause`, `resume` | services | `resume` also confirms a refill (AS-9) |
 | `/r5/home/get`, `set` | services | Home location (FM-10) |
-| `/r5/stop` | service | Emergency software stop (NAV-4) |
+| `/r5/stop` | service | Emergency software stop (NAV-4); ends any job |
+| `/r5/halt` | service | The always-visible STOP button: stops like `/r5/stop`, but pauses a running job so RESUME can carry on |
 | `/r5/status` | topic, 1 Hz | Summary for the status strip |
 | `/r5/stats` | topic | Operating time, distance, service due |
 | `/r5/motor_test` | action | Bounded motor test (RB-9, RB-10) |

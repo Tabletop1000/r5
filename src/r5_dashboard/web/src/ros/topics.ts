@@ -63,6 +63,8 @@ export const SERVICES = {
   resumeJob: { name: '/r5/job/resume', type: 'r5_dashboard_interfaces/srv/ResumeJob' },
   /** Software stop: ends any job, cancels navigation, zero velocity (spec NAV-4). */
   stop: { name: '/r5/stop', type: 'std_srvs/srv/Trigger' },
+  /** The STOP button: like stop, but a running job is paused so it can be resumed. */
+  halt: { name: '/r5/halt', type: 'std_srvs/srv/Trigger' },
   /** Answers at once (r5_dashboard_nodes). Used for the round-trip time and the link check. */
   ping: { name: '/r5/ping', type: 'std_srvs/srv/Trigger' },
   /** navsat_transform's own parameter service, for yaw_offset (useYawOffsetDeg). */

@@ -1,7 +1,9 @@
 """job_manager node: plans and runs area spray jobs (spec 4.2, 5.2, AS-1 to AS-9, NAV-4).
 
 Services   /r5/job/defaults (GetJobDefaults), /r5/job/plan (PlanJob), /r5/job/start (StartJob)
-           /r5/job/pause (Trigger), /r5/job/resume (ResumeJob), /r5/stop (Trigger)
+           /r5/job/pause (Trigger), /r5/job/resume (ResumeJob), /r5/stop (Trigger),
+           /r5/halt (Trigger): the dashboard's STOP button. Like Stop, but a running job is paused,
+           not ended, so it can be resumed.
 Publishes  /r5/job/status (JobStatus, latched, on change and 1 Hz)
            /r5/job/plan   (CoveragePlan of the current job, latched)
            /r5/sprayer/enable (std_msgs/Bool), /r5/sprayer/flow_setpoint (std_msgs/Float32, L/min)
@@ -245,6 +247,7 @@ class JobManagerNode(Node):
         self.create_service(Trigger, "/r5/job/pause", self.on_pause, callback_group=group)
         self.create_service(ResumeJob, "/r5/job/resume", self.on_resume, callback_group=group)
         self.create_service(Trigger, "/r5/stop", self.on_stop, callback_group=group)
+        self.create_service(Trigger, "/r5/halt", self.on_halt, callback_group=group)
 
         self.lock = threading.RLock()
         self.status = JobStatus(state=JobStatus.IDLE, current_action="Idle")
@@ -560,11 +563,8 @@ class JobManagerNode(Node):
         response.success, response.message = True, "Resuming."
         return response
 
-    def on_stop(self, _request, response):
-        """Software stop (spec NAV-4): end any job, cancel navigation, sprayer off, zero velocity."""
-        job_running = self.thread is not None and self.thread.is_alive()
-        self.stop_requested.set()
-        self.resume_event.set()
+    def stop_motion(self) -> None:
+        """Cancels all navigation, sprayer off, and holds zero velocity for STOP_HOLD_S."""
         self.cancel_active_goal()
         for client in self.cancel_clients:  # all goals, including ones this node didn't send
             if client.service_is_ready():
@@ -573,6 +573,30 @@ class JobManagerNode(Node):
         # Holding the top-priority input overrides every other command, even the controller's.
         self.stop_hold_until = time.monotonic() + STOP_HOLD_S
         self.publish_zero_velocity()
+
+    def on_halt(self, request, response):
+        """The STOP button: stops the robot at once. A running job is paused so it can be resumed;
+        anything else (a go-to, a job that hasn't started moving) is stopped as by /r5/stop."""
+        job_running = self.thread is not None and self.thread.is_alive()
+        with self.lock:
+            state = self.status.state
+        if not (job_running and state in ACTIVE):
+            return self.on_stop(request, response)
+        self.stop_motion()
+        self.get_logger().warning("STOP pressed on the dashboard; job paused")
+        # Already waiting: keep its message, which on_resume may check (low battery).
+        if state not in (JobStatus.PAUSED, JobStatus.WAITING_FOR_REFILL):
+            self.pause_requested.set()
+            self.set_status(message="Stopped from the dashboard. Press Resume to carry on.")
+        response.success, response.message = True, "Stopped. The job is paused."
+        return response
+
+    def on_stop(self, _request, response):
+        """Software stop (spec NAV-4): end any job, cancel navigation, sprayer off, zero velocity."""
+        job_running = self.thread is not None and self.thread.is_alive()
+        self.stop_requested.set()
+        self.resume_event.set()
+        self.stop_motion()
         self.get_logger().warning("Stop requested from the dashboard")
         if not job_running:  # a running job reports its own stop, with how much was sprayed
             self.set_status(current_action="Stopped", message="Stopped from the dashboard.")
