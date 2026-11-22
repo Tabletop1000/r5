@@ -5,7 +5,7 @@ import { formatArea, formatLength, inputNumber, length } from '../../display/uni
 import { checkField, LocalProjection, MAX_HEADLAND_M, msgFromDraft, draftFromMsg, type FieldDraft } from '../../fields/geo';
 import { DrawLayer, type DrawApi, type DrawShapes, type Role } from '../../map/DrawLayer';
 import { GatePicker } from '../../map/GatePicker';
-import { FieldsLayer, FitTo, HomeMarker, RobotMarker, TrackLayer } from '../../map/layers';
+import { CrossingsLayer, FieldsLayer, FitTo, HomeMarker, RobotMarker, TrackLayer } from '../../map/layers';
 import { MapView } from '../../map/MapView';
 import { useRobot, useTopic } from '../../ros/RobotContext';
 import { RECORDING_STATE, SERVICES, TOPICS, type LatLon, type RecordingStatus, type SaveFieldResponse } from '../../ros/topics';
@@ -56,6 +56,7 @@ export function FieldEditor({ initial, otherNames, startAt, home, fromRecording,
   const onShapes = useCallback((s: DrawShapes) => setDraft((d) => ({ ...d, boundary: s.boundary, keepOut: s.keepOut })), []);
   const { units } = useDisplay();
   const check = checkField(draft, otherNames, units);
+  const crossingShapes = useMemo(() => [draft.boundary, ...draft.keepOut], [draft.boundary, draft.keepOut]);
   // The headland input holds what was typed, in the display units; the draft keeps metres.
   const headlandText = (m: number) => (Number.isFinite(m) ? inputNumber(length.fromM(m, units), 2) : '');
   const [headland, setHeadland] = useState(() => headlandText(draft.headlandWidthM));
@@ -289,6 +290,7 @@ export function FieldEditor({ initial, otherNames, startAt, home, fromRecording,
           <TrackLayer points={recording.points} closed={recording.state === RECORDING_STATE.FINISHED} />
         )}
         <DrawLayer initial={initialShapes} apiRef={drawApi} onChange={onShapes} onSelect={setSelected} onModeChange={setDrawing} onLoadProblem={setLoadProblem} />
+        <CrossingsLayer shapes={crossingShapes} />
         {gatePicking && <GatePicker boundary={draft.boundary} firstPost={gatePicking.first} onPick={pickGatePost} />}
       </MapView>
 

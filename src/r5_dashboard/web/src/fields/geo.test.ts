@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { LatLon } from '../ros/topics';
-import { areaM2, checkField, distanceToRing, formatArea, fromRing, LocalProjection, nearestOnRing, ringSelfIntersects, toRing, type FieldDraft } from './geo';
+import { areaM2, checkField, distanceToRing, formatArea, fromRing, LocalProjection, nearestOnRing, ringCrossings, ringSelfIntersects, toRing, type FieldDraft } from './geo';
 import { innerArea } from './headland';
 import { gridLines, gridSpacingM } from '../map/grid';
 
@@ -29,6 +29,16 @@ describe('geometry', () => {
   it('detects a crossed boundary', () => {
     expect(ringSelfIntersects([[0, 0], [10, 10], [10, 0], [0, 10]])).toBe(true);
     expect(ringSelfIntersects([[0, 0], [10, 0], [10, 10], [0, 10]])).toBe(false);
+  });
+
+  it('finds where a ring crosses itself', () => {
+    expect(ringCrossings([[0, 0], [10, 10], [10, 0], [0, 10]])).toEqual([[5, 5]]);
+    expect(ringCrossings([[0, 0], [10, 0], [10, 10], [0, 10]])).toEqual([]);
+    // A GPS wobble: the track doubles back over the first side near the start.
+    const [c] = ringCrossings([[0, 0], [20, 0], [20, 20], [0, 20], [2, -1]]);
+    expect(c[1]).toBeCloseTo(0);
+    expect(c[0]).toBeGreaterThan(0);
+    expect(c[0]).toBeLessThan(2);
   });
   it('converts GeoJSON rings both ways', () => {
     const ring = toRing(square);

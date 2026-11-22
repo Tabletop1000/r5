@@ -74,6 +74,39 @@ export function ringSelfIntersects(ring: XY[]): boolean {
   return false;
 }
 
+/** Where a ring crosses itself: one point per pair of crossing edges. */
+export function ringCrossings(ring: XY[]): XY[] {
+  const e = edges(ring);
+  const n = e.length;
+  const out: XY[] = [];
+  for (let i = 0; i < n; i++) {
+    for (let j = i + 1; j < n; j++) {
+      if (j === i + 1 || (i === 0 && j === n - 1)) continue;
+      const [p1, p2] = e[i];
+      const [q1, q2] = e[j];
+      if (!segmentsIntersect(p1, p2, q1, q2)) continue;
+      const r: XY = [p2[0] - p1[0], p2[1] - p1[1]];
+      const d: XY = [q2[0] - q1[0], q2[1] - q1[1]];
+      const denom = r[0] * d[1] - r[1] * d[0];
+      if (denom === 0) {
+        // Overlapping, in line: mark the first end of one edge that lies on the other.
+        out.push([p1, p2, q1, q2].find((p, k) => (k < 2 ? onSegment(q1, q2, p) : onSegment(p1, p2, p))) ?? p1);
+        continue;
+      }
+      const t = ((q1[0] - p1[0]) * d[1] - (q1[1] - p1[1]) * d[0]) / denom;
+      out.push([p1[0] + t * r[0], p1[1] + t * r[1]]);
+    }
+  }
+  return out;
+}
+
+/** ringCrossings for a boundary in latitude and longitude. */
+export function crossingsOf(points: LatLon[]): LatLon[] {
+  if (points.length < 4) return [];
+  const proj = LocalProjection.around(points);
+  return ringCrossings(points.map((p) => proj.toXY(p))).map((xy) => proj.toLatLon(xy));
+}
+
 export function ringsCross(a: XY[], b: XY[]): boolean {
   return edges(a).some(([p1, p2]) => edges(b).some(([q1, q2]) => segmentsIntersect(p1, p2, q1, q2)));
 }
@@ -167,13 +200,13 @@ export function checkField(d: FieldDraft, otherNames: string[], u: Units = 'metr
   const proj = LocalProjection.around(d.boundary);
   const outer = d.boundary.map((p) => proj.toXY(p));
   const area = ringArea(outer);
-  if (ringSelfIntersects(outer)) errors.push('The boundary crosses itself.');
+  if (ringSelfIntersects(outer)) errors.push("The boundary crosses itself where marked in red. Drag corners, or right-click them to delete, until it doesn't.");
   else if (area < 1) errors.push('The boundary encloses no area.');
 
   const zones = d.keepOut.map((z) => z.map((p) => proj.toXY(p)));
   zones.forEach((z, i) => {
     if (z.length < 3) errors.push(`Keep-out zone ${i + 1} needs at least 3 corners.`);
-    else if (ringSelfIntersects(z)) errors.push(`Keep-out zone ${i + 1} crosses itself.`);
+    else if (ringSelfIntersects(z)) errors.push(`Keep-out zone ${i + 1} crosses itself where marked in red.`);
     else if (!ringInside(z, outer)) errors.push(`Keep-out zone ${i + 1} must lie inside the boundary.`);
   });
   for (let i = 0; i < zones.length; i++)

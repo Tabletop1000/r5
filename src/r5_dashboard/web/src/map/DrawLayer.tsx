@@ -71,7 +71,9 @@ export function DrawLayer({ initial, apiRef, onChange, onSelect, onModeChange, o
             polygon: {
               feature: {
                 draggable: false,
-                selfIntersectable: false,
+                // Allowed while editing, so a shape that already crosses itself (a GPS wobble in a
+                // recording) can be fixed a corner at a time. checkField stops it being saved.
+                selfIntersectable: true,
                 coordinates: { draggable: true, midpoints: true, deletable: true },
               },
             },

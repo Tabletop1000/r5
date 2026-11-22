@@ -10,7 +10,7 @@ import {
 import { useEffect, useMemo, useRef } from 'react';
 import type { Feature, FeatureCollection } from 'geojson';
 import { innerArea } from '../fields/headland';
-import { toRing, type FieldDraft } from '../fields/geo';
+import { crossingsOf, toRing, type FieldDraft } from '../fields/geo';
 import { useTopic } from '../ros/RobotContext';
 import { TOPICS, type Imu, type LatLon, type NavSatFix } from '../ros/topics';
 import { compassHeading, quaternionToEuler } from '../robot/imu';
@@ -237,5 +237,26 @@ export function FitTo({ points, fitKey, maxZoom = 19 }: { points: LatLon[]; fitK
     for (const p of pts) b.extend([p.longitude, p.latitude]);
     map.fitBounds(b, { padding: 48, maxZoom, duration: 0 });
   }, [map, fitKey, maxZoom]);
+  return null;
+}
+
+/** Red rings where the boundary or a keep-out zone crosses itself, so the user can see what to fix. */
+export function CrossingsLayer({ shapes }: { shapes: LatLon[][] }) {
+  const data = useMemo<FeatureCollection>(
+    () => ({
+      type: 'FeatureCollection',
+      features: shapes.flatMap(crossingsOf).map(
+        (p): Feature => ({ type: 'Feature', properties: {}, geometry: { type: 'Point', coordinates: [p.longitude, p.latitude] } }),
+      ),
+    }),
+    [shapes],
+  );
+  useGeoJsonLayers('crossings', data, [
+    {
+      id: 'crossings-ring',
+      type: 'circle',
+      paint: { 'circle-radius': 12, 'circle-color': 'rgba(0,0,0,0)', 'circle-stroke-color': '#e53935', 'circle-stroke-width': 3 },
+    },
+  ]);
   return null;
 }
