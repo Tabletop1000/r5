@@ -18,6 +18,7 @@ import {
   type StartJobResponse,
 } from '../../ros/topics';
 import { checkForm, formatDuration, formFromSettings, settingsFromForm, type Limits, type SettingsForm } from '../../spray/settings';
+import { clearSetupDraft, loadSetupDraft, saveSetupDraft } from '../../spray/setupDraft';
 
 const PLAN_DELAY_MS = 600;
 
@@ -32,10 +33,18 @@ export function JobSetup() {
   const link = useLinkState();
   const { units } = useDisplay();
   const { fields, home } = useFields();
-  const [fieldId, setFieldId] = useState(fieldFromHash);
-  const [form, setForm] = useState<SettingsForm | null>(null);
-  const [limits, setLimits] = useState<Limits | null>(null);
-  const [planResult, setPlanResult] = useState<PlanJobResponse | null>(null);
+  // Carry on where the user left off, unless a link (Fields page → Spray) names another field.
+  const [restored] = useState(() => {
+    const d = loadSetupDraft();
+    const linked = fieldFromHash();
+    return d && (!linked || linked === d.fieldId) ? d : null;
+  });
+  const [fieldId, setFieldId] = useState(() => restored?.fieldId ?? fieldFromHash());
+  const [form, setForm] = useState<SettingsForm | null>(restored?.form ?? null);
+  const [limits, setLimits] = useState<Limits | null>(restored?.limits ?? null);
+  const [planResult, setPlanResult] = useState<PlanJobResponse | null>(restored?.planResult ?? null);
+  // The field the form was filled in for: the defaults aren't reloaded over the user's changes.
+  const formFieldId = useRef(restored?.form ? restored.formFieldId : '');
   const [planning, setPlanning] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [confirming, setConfirming] = useState(false);
@@ -48,7 +57,7 @@ export function JobSetup() {
   const formCheck = form ? checkForm(form, limits, units) : null;
 
   // The form holds numbers in the display units: convert it if the units are changed meanwhile.
-  const formUnits = useRef(units);
+  const formUnits = useRef(restored?.formUnits ?? units);
   useEffect(() => {
     if (formUnits.current === units) return;
     const from = formUnits.current;
@@ -59,6 +68,7 @@ export function JobSetup() {
 
   // Starting values: the field's last-used settings, or the robot's defaults (spec AS-2).
   useEffect(() => {
+    if (fieldId && fieldId === formFieldId.current) return;
     setPlanResult(null);
     if (!fieldId || link.status !== 'connected') return;
     let cancelled = false;
@@ -66,6 +76,7 @@ export function JobSetup() {
       .callService<{ field_id: string }, JobDefaultsResponse>(SERVICES.jobDefaults, { field_id: fieldId })
       .then((d) => {
         if (cancelled) return;
+        formFieldId.current = fieldId;
         setForm(formFromSettings(d.settings, formUnits.current));
         setLimits({ maxSpeedKmh: d.max_speed_kmh, pumpMaxLMin: d.pump_max_flow_l_min });
       })
@@ -74,6 +85,10 @@ export function JobSetup() {
       cancelled = true;
     };
   }, [robot, fieldId, link.status]);
+
+  useEffect(() => {
+    saveSetupDraft({ fieldId, form, formFieldId: formFieldId.current, formUnits: formUnits.current, limits, planResult });
+  }, [fieldId, form, limits, planResult]);
 
   // Plan preview whenever the field or settings change (spec AS-3).
   useEffect(() => {
@@ -104,7 +119,8 @@ export function JobSetup() {
         { settings: settingsFromForm(fieldId, form, units), tank_full_confirmed: tankFull },
         15000,
       );
-      if (!r.success) {
+      if (r.success) clearSetupDraft();
+      else {
         setError(r.message);
         if (r.checks.length && planResult) setPlanResult({ ...planResult, checks: r.checks, ready: false });
       }

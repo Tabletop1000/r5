@@ -31,11 +31,18 @@ export function SprayPage() {
 function AreaSpray() {
   const status = useTopic<JobStatus>(TOPICS.jobStatus).message;
   // A finished, stopped or failed job stays on screen until the user moves on.
-  const [dismissedPlan, setDismissedPlan] = useState<number | null>(null);
+  const [dismissedPlan, setDismissedPlan] = useState<number | null>(lastDismissedPlan);
   const showMonitor =
     status !== null && status.state !== 0 && (JOB_ACTIVE.has(status.state) || status.plan_id !== dismissedPlan);
-  return showMonitor ? <JobMonitor status={status} onDone={() => setDismissedPlan(status.plan_id)} /> : <JobSetup />;
+  const dismiss = (planId: number) => {
+    lastDismissedPlan = planId;
+    setDismissedPlan(planId);
+  };
+  return showMonitor ? <JobMonitor status={status} onDone={() => dismiss(status.plan_id)} /> : <JobSetup />;
 }
+
+/** Kept while the user visits other pages, so an ended job they've moved on from stays hidden. */
+let lastDismissedPlan: number | null = null;
 
 function Tab({ id, label, mode, onSelect }: { id: Mode; label: string; mode: Mode; onSelect: (m: Mode) => void }) {
   return (
