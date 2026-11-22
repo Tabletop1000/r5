@@ -37,3 +37,9 @@ def format_flow(l_min: float, units: str) -> str:
     if units == UNITS_US:
         return f"{l_min / L_PER_US_GALLON:.2f} gal/min"
     return f"{l_min:.1f} L/min"
+
+
+def format_length(m: float, units: str) -> str:
+    if units == UNITS_US:
+        return f"{m * FT_PER_M:.0f} ft"
+    return f"{m:.1f} m" if m < 10 else f"{m:.0f} m"

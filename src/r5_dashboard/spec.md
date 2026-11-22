@@ -258,6 +258,11 @@ dashboard shows "Not available" for that item rather than a blank or zero.
   or clear the area.") which the user must confirm. Tests are refused while a job is running.
   Commands are limited in speed and time on the robot, not just in the UI, and stop automatically
   if the link drops.
+- **RB-11 Go to.** A map on the Robot page sends the robot to a clicked point, after confirmation.
+  With a mouse, a dotted line runs from the robot to the pointer with the distance beside it; on a
+  touch screen the line is drawn to the tapped point. The robot drives in a straight line at the
+  transit speed (Nav2 `NavigateToPose`), not routed round fields. Refused while a job runs and
+  beyond 300 m. STOP cancels it.
 
 ## 5. Robot interface
 
@@ -302,6 +307,7 @@ the `r5` workspace yet.
 | `/r5/job/pause`, `resume` | services | `resume` also confirms a refill (AS-9) |
 | `/r5/home/get`, `set` | services | Home location (FM-10) |
 | `/r5/stop` | service | Emergency software stop (NAV-4); ends any job |
+| `/r5/goto` | service | Drive straight to a point (RB-11) |
 | `/r5/halt` | service | The always-visible STOP button: stops like `/r5/stop`, but pauses a running job so RESUME can carry on |
 | `/r5/status` | topic, 1 Hz | Summary for the status strip |
 | `/r5/stats` | topic | Operating time, distance, service due |

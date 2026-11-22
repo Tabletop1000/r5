@@ -4,7 +4,7 @@ import pytest
 
 from r5_dashboard_server.job import Episode, tilt_deg
 from r5_dashboard_server.settings import BY_KEY, DEVICE_TIME_ZONE, check_changes, time_zone_choices
-from r5_dashboard_server.units import format_area, format_flow, format_speed, format_volume
+from r5_dashboard_server.units import format_area, format_flow, format_length, format_speed, format_volume
 
 
 def quat_about_x(deg):
@@ -59,6 +59,9 @@ def test_units():
     assert format_area(500, "metric") == "500 m²"
     assert format_volume(37.85411784, "us") == "10.0 gal"
     assert format_flow(3.785411784, "us") == "1.00 gal/min"
+    assert format_length(12.34, "metric") == "12 m"
+    assert format_length(4.56, "metric") == "4.6 m"
+    assert format_length(3.048, "us") == "10 ft"
 
 
 def test_time_zones():

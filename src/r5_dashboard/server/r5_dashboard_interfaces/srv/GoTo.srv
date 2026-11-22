@@ -1,0 +1,7 @@
+# Drive straight to a point (the Robot page's map). Refused while a spray job is running.
+# STOP (/r5/halt or /r5/stop) cancels it. A new go-to replaces one under way.
+float64 latitude
+float64 longitude
+---
+bool success
+string message

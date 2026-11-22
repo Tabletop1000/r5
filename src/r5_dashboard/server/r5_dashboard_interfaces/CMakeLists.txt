@@ -23,6 +23,7 @@ rosidl_generate_interfaces(${PROJECT_NAME}
   "srv/DeleteField.srv"
   "srv/GetHome.srv"
   "srv/GetJobDefaults.srv"
+  "srv/GoTo.srv"
   "srv/ListFields.srv"
   "srv/PlanJob.srv"
   "srv/ResumeJob.srv"

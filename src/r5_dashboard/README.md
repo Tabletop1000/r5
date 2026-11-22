@@ -250,7 +250,7 @@ robot yet show "Not available"; [TODO_ROBOT.md](TODO_ROBOT.md) lists them.
 | Motor test | `/r5/motor_test` | `motor_test` |
 | Fields, home | `/r5/fields/*`, `/r5/home/*` services, `/r5/fields/revision` | `field_manager` |
 | Settings, nickname | `/r5/settings`, `/r5/settings/set` | `robot_status` |
-| Spray jobs | `/r5/job/defaults`, `plan`, `start`, `pause`, `resume` services; `/r5/job/status`, `/r5/job/plan` topics; `/r5/stop` | `job_manager` (uses Nav2 `/follow_path`, `/navigate_to_pose`, `/speed_limit` and robot_localization `/fromLL`) |
+| Spray jobs, go-to | `/r5/job/defaults`, `plan`, `start`, `pause`, `resume`, `/r5/goto` services; `/r5/job/status`, `/r5/job/plan` topics; `/r5/stop` | `job_manager` (uses Nav2 `/follow_path`, `/navigate_to_pose`, `/speed_limit` and robot_localization `/fromLL`) |
 | Sprayer | `/r5/sprayer/enable`, `/r5/sprayer/flow_setpoint` | Published by `job_manager`; placeholder until the sprayer exists |
 | Boundary recording | `/r5/recording/start`, `stop`, `clear`, `/r5/recording/status` | `field_manager` (reads `/fix`, `/navpvt`, `/joy`) |
 | Current action, STOP/RESUME | `/r5/job/status`, `/r5/halt`, `/r5/job/resume`, `/r5/dashboard/odometry/local` | `job_manager` |

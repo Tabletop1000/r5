@@ -901,6 +901,27 @@ a.button.primary {
   background: var(--surface-2);
 }
 
+.card-wide {
+  grid-column: 1 / -1;
+}
+
+.goto-map {
+  height: clamp(320px, 55vh, 560px);
+  margin-top: 8px;
+}
+
+.goto-label {
+  padding: 2px 6px;
+  border-radius: 4px;
+  background: rgb(255 255 255 / 0.92);
+  color: #0d3c78;
+  font-weight: 700;
+  font-size: 13px;
+  white-space: nowrap;
+  pointer-events: none;
+  box-shadow: 0 1px 3px rgb(0 0 0 / 0.35);
+}
+
 .fields-map {
   height: max(420px, calc(100vh - 330px));
   position: sticky;

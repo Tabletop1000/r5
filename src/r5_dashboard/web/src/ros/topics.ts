@@ -65,6 +65,8 @@ export const SERVICES = {
   stop: { name: '/r5/stop', type: 'std_srvs/srv/Trigger' },
   /** The STOP button: like stop, but a running job is paused so it can be resumed. */
   halt: { name: '/r5/halt', type: 'std_srvs/srv/Trigger' },
+  /** Drive straight to a point (Robot page). */
+  goTo: { name: '/r5/goto', type: 'r5_dashboard_interfaces/srv/GoTo' },
   /** Answers at once (r5_dashboard_nodes). Used for the round-trip time and the link check. */
   ping: { name: '/r5/ping', type: 'std_srvs/srv/Trigger' },
   /** navsat_transform's own parameter service, for yaw_offset (useYawOffsetDeg). */

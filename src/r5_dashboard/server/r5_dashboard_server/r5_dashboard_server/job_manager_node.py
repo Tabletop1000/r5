@@ -4,6 +4,7 @@ Services   /r5/job/defaults (GetJobDefaults), /r5/job/plan (PlanJob), /r5/job/st
            /r5/job/pause (Trigger), /r5/job/resume (ResumeJob), /r5/stop (Trigger),
            /r5/halt (Trigger): the dashboard's STOP button. Like Stop, but a running job is paused,
            not ended, so it can be resumed.
+           /r5/goto (GoTo): drive straight to a point, at the transit speed, when no job is running
 Publishes  /r5/job/status (JobStatus, latched, on change and 1 Hz)
            /r5/job/plan   (CoveragePlan of the current job, latched)
            /r5/sprayer/enable (std_msgs/Bool), /r5/sprayer/flow_setpoint (std_msgs/Float32, L/min)
@@ -53,7 +54,7 @@ from std_srvs.srv import Trigger
 
 from r5_dashboard_interfaces.msg import AlertArray, Check, CoveragePlan as PlanMsg, JobStatus, LatLon, PathSection, RobotSettings
 from r5_dashboard_interfaces.msg import SpraySettings as SettingsMsg
-from r5_dashboard_interfaces.srv import GetJobDefaults, PlanJob, ResumeJob, StartJob
+from r5_dashboard_interfaces.srv import GetJobDefaults, GoTo, PlanJob, ResumeJob, StartJob
 
 from .auth import write_private_file
 from .coverage import SWATH, PlanError, RobotLimits, SpraySettings, plan_coverage
@@ -67,7 +68,7 @@ from .settings import BATTERY_LOW, BATTERY_STOP, BATTERY_WARN, LINK_LOST, TOO_ST
 from .settings import ALERTS_ALLOW_ACKNOWLEDGED, COMMS_CONTINUE, COMMS_DELAYED_RETURN_HOME, COMMS_STOP
 from .settings import configure as configure_settings
 from .settings import defaults as settings_defaults
-from .units import format_area, format_volume
+from .units import format_area, format_length, format_volume
 from .shutdown import init_without_signal_handlers
 
 try:  # Only on the real robot.
@@ -125,6 +126,9 @@ def settings_to_msg(s: SpraySettings) -> SettingsMsg:
 def check(level: int, label: str, detail: str) -> Check:
     return Check(level=level, label=label, detail=detail)
 
+
+# Furthest a go-to may send the robot, so a mis-click on a zoomed-out map can't send it across the farm.
+MAX_GOTO_M = 300.0
 
 # How long Stop holds zero velocity on twist_mux, so nothing else can move the robot meanwhile.
 STOP_HOLD_S = 2.0
@@ -247,6 +251,7 @@ class JobManagerNode(Node):
         self.create_service(ResumeJob, "/r5/job/resume", self.on_resume, callback_group=group)
         self.create_service(Trigger, "/r5/stop", self.on_stop, callback_group=group)
         self.create_service(Trigger, "/r5/halt", self.on_halt, callback_group=group)
+        self.create_service(GoTo, "/r5/goto", self.on_goto, callback_group=group)
 
         self.lock = threading.RLock()
         self.status = JobStatus(state=JobStatus.IDLE, current_action="Idle")
@@ -260,6 +265,9 @@ class JobManagerNode(Node):
         self.active_goal = None
         self.sprayer_on = False
         self.stop_hold_until = 0.0
+        # Go-to (on_goto): each request is numbered, and a newer one or a job takes over.
+        self.goto_seq = 0
+        self.goto_goal = None
         self.create_timer(1.0, self.publish_status, callback_group=group)
         self.create_timer(0.1, self.hold_stop, callback_group=group)
         self.create_timer(1.0, self.check_safety, callback_group=group)
@@ -523,6 +531,7 @@ class JobManagerNode(Node):
             self.pause_requested.clear()
             self.resume_event.clear()
             self.home_requested.clear()
+            self.cancel_goto()
             self.handled_loss = self.warned_loss = 0
             self.plan_pub.publish(self.plan_to_msg(fld, plan, s, self.plan_id))
             self.thread = threading.Thread(target=self.run_job, args=(fld, plan, s, self.plan_id), daemon=True)
@@ -562,6 +571,90 @@ class JobManagerNode(Node):
         self.resume_event.set()
         response.success, response.message = True, "Resuming."
         return response
+
+    def on_goto(self, request, response):
+        """The Robot page's map: drive straight to a point. Nav2 doesn't know about fields, so the
+        line isn't routed round them; the page says so."""
+        response.success = False
+        with self.lock:
+            job_active = self.status.state in ACTIVE
+        if job_active or (self.thread is not None and self.thread.is_alive()):
+            response.message = "A spray job is running. End it before sending the robot somewhere else."
+            return response
+        if not (math.isfinite(request.latitude) and math.isfinite(request.longitude)):
+            response.message = "That isn't a valid position."
+            return response
+        if self.pose is None or time.monotonic() - self.pose_stamp > FRESH_S:
+            response.message = "The robot's position isn't known (no /odometry/global)."
+            return response
+        if not self.navigate.server_is_ready():
+            response.message = "Navigation (Nav2) isn't running."
+            return response
+        if not self.from_ll.wait_for_service(timeout_sec=1.0):
+            response.message = "navsat_transform's /fromLL service isn't available."
+            return response
+        try:
+            req = FromLL.Request(ll_point=GeoPoint(latitude=request.latitude, longitude=request.longitude, altitude=0.0))
+            res = self.wait_future(self.from_ll.call_async(req), 5.0)
+        except RuntimeError:
+            response.message = "navsat_transform didn't answer."
+            return response
+        target = (res.map_point.x, res.map_point.y)
+        distance = math.dist(self.pose, target)
+        if distance > MAX_GOTO_M:
+            response.message = f"That's {format_length(distance, self.units())} away. Go-to is limited to {format_length(MAX_GOTO_M, self.units())}."
+            return response
+        self.cancel_goto()
+        seq = self.goto_seq
+        self.stop_requested.clear()
+        threading.Thread(target=self.run_goto, args=(target, distance, seq), daemon=True).start()
+        response.success, response.message = True, f"Going to a point {format_length(distance, self.units())} away."
+        return response
+
+    def cancel_goto(self) -> None:
+        """Ends a go-to under way. Its thread notices the new number and leaves the status alone."""
+        self.goto_seq += 1
+        goal = self.goto_goal
+        if goal is not None:
+            goal.cancel_goal_async()
+        self.goto_goal = None
+
+    def run_goto(self, target, distance: float, seq: int) -> None:
+        current = lambda: seq == self.goto_seq  # noqa: E731
+        units = self.units()
+        self.set_status(current_action=f"Going to a point {format_length(distance, units)} away")
+        self.set_speed_limit(self.setting_speed_mps("transit_speed_kmh"))
+        outcome = "Go-to failed: Nav2 couldn't reach the point"
+        try:
+            goal = NavigateToPose.Goal(pose=self.pose_msg(target, heading(self.pose, target)))
+            handle = self.wait_future(self.navigate.send_goal_async(goal), 10.0)
+            if not handle.accepted:
+                outcome = "Go-to refused by Nav2"
+                return
+            if not current():
+                handle.cancel_goal_async()
+                return
+            self.goto_goal = handle
+            result = handle.get_result_async()
+            while not result.done():
+                if self.stop_requested.is_set() or not current():
+                    handle.cancel_goal_async()
+                    outcome = "Go-to stopped"
+                    return
+                time.sleep(0.1)
+            if result.result().status == GoalStatus.STATUS_SUCCEEDED:
+                outcome = "Arrived at the go-to point"
+            elif result.result().status == GoalStatus.STATUS_CANCELED:
+                outcome = "Go-to stopped"
+        except Exception as exc:  # noqa: BLE001 - report it, and leave the robot stopped
+            self.get_logger().error(f"Go-to failed: {exc}")
+            outcome = f"Go-to failed: {exc}"
+        finally:
+            if current():
+                self.goto_goal = None
+                self.set_speed_limit(0.0)  # 0 removes the limit
+                self.set_status(current_action=outcome)
+                self.get_logger().info(outcome)
 
     def stop_motion(self) -> None:
         """Cancels all navigation, sprayer off, and holds zero velocity for STOP_HOLD_S."""
