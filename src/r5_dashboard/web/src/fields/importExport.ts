@@ -32,6 +32,15 @@ export function fieldToGeoJson(f: FieldMsg): string {
         properties: { role: 'keep_out', index: i },
         geometry: { type: 'Polygon', coordinates: [toRing(z.points)] },
       })),
+      ...((f.gate ?? []).length
+        ? [
+            {
+              type: 'Feature',
+              properties: { role: 'gate' },
+              geometry: { type: 'LineString', coordinates: toRing(f.gate).slice(0, -1) },
+            },
+          ]
+        : []),
     ],
   };
   return JSON.stringify(collection, null, 2) + '\n';
@@ -48,6 +57,8 @@ export interface ImportedField {
   name: string;
   boundary: LatLon[];
   keepOut: LatLon[][];
+  /** From this dashboard's own exports; empty otherwise. */
+  gate: LatLon[];
   headlandWidthM: number;
   notes: string;
   /** Things the user should know, e.g. which polygon was used. */
@@ -121,6 +132,17 @@ function geoJsonPolygons(data: unknown): Poly[] {
   return out;
 }
 
+/** The gate line from this dashboard's own exports: a LineString of 2 points with role "gate". */
+function geoJsonGate(data: unknown): LatLon[] {
+  const features = (data as { features?: unknown[] })?.features;
+  if (!Array.isArray(features)) return [];
+  for (const f of features as { properties?: { role?: unknown }; geometry?: { type?: string; coordinates?: Ring } }[]) {
+    if (f?.properties?.role === 'gate' && f.geometry?.type === 'LineString' && f.geometry.coordinates?.length === 2)
+      return toLatLon(f.geometry.coordinates);
+  }
+  return [];
+}
+
 function kmlPolygons(text: string): Poly[] {
   // Plain text matching is enough for KML from Google Earth and QGIS, and works without a browser.
   const tag = (name: string) => new RegExp(`<(?:\\w+:)?${name}\\b[^>]*>([\\s\\S]*?)</(?:\\w+:)?${name}>`, 'gi');
@@ -157,6 +179,7 @@ function stem(fileName: string): string {
 export function parseFieldFile(text: string, fileName: string): ImportedField {
   const isKml = /\.kml$/i.test(fileName) || /^\s*<\?xml|<kml[\s>]/i.test(text.slice(0, 200));
   let polys: Poly[];
+  let gate: LatLon[] = [];
   if (isKml) {
     polys = kmlPolygons(text);
   } else {
@@ -167,6 +190,7 @@ export function parseFieldFile(text: string, fileName: string): ImportedField {
       throw new ImportError("The file isn't valid GeoJSON or KML.");
     }
     polys = geoJsonPolygons(data);
+    gate = geoJsonGate(data);
   }
   if (polys.length === 0) throw new ImportError('The file has no polygon in it. A field needs an area, not just lines or points.');
 
@@ -193,6 +217,7 @@ export function parseFieldFile(text: string, fileName: string): ImportedField {
     name: name.slice(0, 60),
     boundary: boundary.ll,
     keepOut,
+    gate,
     headlandWidthM: Number.isFinite(headland) && headland >= 0 ? headland : DEFAULT_HEADLAND_M,
     notes: typeof props.notes === 'string' ? props.notes : '',
     notices,

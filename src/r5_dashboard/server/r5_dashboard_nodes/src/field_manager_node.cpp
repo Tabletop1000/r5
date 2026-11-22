@@ -95,6 +95,7 @@ msg::Field field_to_msg(const Field & f)
     polygon.points = ring_to_msg(zone);
     m.keep_out.push_back(polygon);
   }
+  m.gate = ring_to_msg(f.gate);
   m.headland_width_m = f.headland_width_m;
   m.source = f.source;
   m.notes = f.notes;
@@ -113,6 +114,7 @@ Field field_from_msg(const msg::Field & m)
   for (const auto & zone : m.keep_out) {
     f.keep_out.push_back(ring_from_msg(zone.points));
   }
+  f.gate = ring_from_msg(m.gate);
   f.headland_width_m = m.headland_width_m;
   f.source = m.source.empty() ? "drawn" : m.source;
   f.notes = m.notes;

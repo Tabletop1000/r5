@@ -182,6 +182,18 @@ Json Field::to_geojson() const
       {"geometry", {{"type", "Polygon"}, {"coordinates", Json::array({ring_json(keep_out[i])})}}},
     });
   }
+  if (!gate.empty()) {
+    Json coords = Json::array();
+    for (const auto & p : gate) {
+      coords.push_back({p.lon, p.lat});
+    }
+    features.push_back(
+    {
+      {"type", "Feature"},
+      {"properties", {{"role", "gate"}}},
+      {"geometry", {{"type", "LineString"}, {"coordinates", coords}}},
+    });
+  }
   return {{"type", "FeatureCollection"}, {"features", features}};
 }
 
@@ -206,6 +218,13 @@ Field Field::from_geojson(const Json & data)
   for (const auto & f : features) {
     if (role(f) == "keep_out") {
       field.keep_out.push_back(ring_from_feature(f));
+    } else if (role(f) == "gate") {
+      for (const auto & c : f.at("geometry").at("coordinates")) {
+        if (!c.is_array() || c.size() < 2) {
+          throw std::invalid_argument("A position needs a longitude and a latitude.");
+        }
+        field.gate.push_back({c.at(1).get<double>(), c.at(0).get<double>()});
+      }
     }
   }
   field.headland_width_m = props.value("headland_width_m", kDefaultHeadlandM);
@@ -255,7 +274,7 @@ void validate(const Field & f, const std::vector<std::string> & other_names)
     throw FieldInvalid("The boundary needs at least 3 points.");
   }
   if (!all_valid(f.boundary) ||
-    !std::all_of(f.keep_out.begin(), f.keep_out.end(), all_valid))
+    !std::all_of(f.keep_out.begin(), f.keep_out.end(), all_valid) || !all_valid(f.gate))
   {
     throw FieldInvalid("A point is outside the valid range of latitude and longitude.");
   }
@@ -290,6 +309,21 @@ void validate(const Field & f, const std::vector<std::string> & other_names)
                 "Keep-out zones " + std::to_string(i + 1) + " and " + std::to_string(j + 1) +
                 " overlap. Merge them into one.");
       }
+    }
+  }
+  if (!f.gate.empty()) {
+    if (f.gate.size() != 2) {
+      throw FieldInvalid("The gate needs 2 posts.");
+    }
+    const geo::XY a = proj.to_xy(f.gate[0]);
+    const geo::XY b = proj.to_xy(f.gate[1]);
+    if (geo::distance_to_ring(a, outer) > kGateOnBoundaryM ||
+      geo::distance_to_ring(b, outer) > kGateOnBoundaryM)
+    {
+      throw FieldInvalid("The gate posts must be on the boundary. Add the gate again.");
+    }
+    if (geo::distance(a, b) < kMinGateWidthM) {
+      throw FieldInvalid(format("The gate must be at least %.0f m wide.", kMinGateWidthM));
     }
   }
 }

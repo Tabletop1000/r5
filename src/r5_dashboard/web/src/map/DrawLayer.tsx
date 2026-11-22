@@ -21,6 +21,8 @@ export interface DrawApi {
   cancelDrawing(): void;
   addKeepOut(points: LatLon[]): void;
   removeSelected(): void;
+  /** While paused, shapes can't be selected or edited, so the map's clicks go elsewhere. */
+  setPaused(paused: boolean): void;
 }
 
 interface Props {
@@ -153,6 +155,14 @@ export function DrawLayer({ initial, apiRef, onChange, onSelect, onModeChange, o
       addKeepOut: (points) => {
         add(points, 'keep_out');
         emit();
+      },
+      setPaused: (paused) => {
+        if (drawingRole) return;
+        if (paused) {
+          for (const f of draw.getSnapshot()) if (f.properties.selected) draw.deselectFeature(f.id as string);
+          callbacks.current.onSelect(null);
+        }
+        draw.setMode(paused ? 'static' : 'select');
       },
       removeSelected: () => {
         const selected = draw.getSnapshot().filter((f) => f.properties.selected && f.properties.role === 'keep_out');

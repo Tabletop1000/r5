@@ -88,6 +88,31 @@ export function pointInRing(p: XY, ring: XY[]): boolean {
   return inside;
 }
 
+/** Distance from p to the nearest point on the ring's edges. */
+export function distanceToRing(p: XY, ring: XY[]): number {
+  const q = nearestOnRing(p, ring);
+  return Math.hypot(p[0] - q[0], p[1] - q[1]);
+}
+
+/** The point on the ring's edges nearest to p. */
+export function nearestOnRing(p: XY, ring: XY[]): XY {
+  let best: XY = ring[0];
+  let bestD = Infinity;
+  for (const [a, b] of edges(ring)) {
+    const dx = b[0] - a[0];
+    const dy = b[1] - a[1];
+    const len2 = dx * dx + dy * dy;
+    const t = len2 > 0 ? Math.max(0, Math.min(1, ((p[0] - a[0]) * dx + (p[1] - a[1]) * dy) / len2)) : 0;
+    const q: XY = [a[0] + t * dx, a[1] + t * dy];
+    const d = Math.hypot(p[0] - q[0], p[1] - q[1]);
+    if (d < bestD) {
+      bestD = d;
+      best = q;
+    }
+  }
+  return best;
+}
+
 export function ringInside(inner: XY[], outer: XY[]): boolean {
   return inner.every((p) => pointInRing(p, outer)) && !ringsCross(inner, outer);
 }
@@ -101,6 +126,9 @@ export function areaM2(boundary: LatLon[]): number {
 export const MAX_NAME_LENGTH = 60;
 export const MAX_HEADLAND_M = 20;
 export const DEFAULT_HEADLAND_M = 2;
+/** How far a gate post may be from the boundary, and the narrowest gate. */
+export const GATE_ON_BOUNDARY_M = 0.5;
+export const MIN_GATE_WIDTH_M = 1;
 /** Outside this range the user gets a warning, not an error (spec FM-6). */
 export const TYPICAL_AREA_HA = { min: 0.1, max: 3 };
 
@@ -109,6 +137,8 @@ export interface FieldDraft {
   name: string;
   boundary: LatLon[];
   keepOut: LatLon[][];
+  /** The two gate posts, on the boundary, or empty for no gate. */
+  gate: LatLon[];
   headlandWidthM: number;
   source: 'drawn' | 'recorded' | 'imported';
   notes: string;
@@ -149,6 +179,14 @@ export function checkField(d: FieldDraft, otherNames: string[], u: Units = 'metr
   for (let i = 0; i < zones.length; i++)
     for (let j = i + 1; j < zones.length; j++)
       if (ringsCross(zones[i], zones[j])) errors.push(`Keep-out zones ${i + 1} and ${j + 1} overlap. Merge them into one.`);
+  if (d.gate.length > 0) {
+    const [a, b] = d.gate.map((p) => proj.toXY(p));
+    if (d.gate.length !== 2) errors.push('The gate needs 2 posts.');
+    else if (distanceToRing(a, outer) > GATE_ON_BOUNDARY_M || distanceToRing(b, outer) > GATE_ON_BOUNDARY_M)
+      errors.push('The gate posts must be on the boundary. Add the gate again.');
+    else if (Math.hypot(a[0] - b[0], a[1] - b[1]) < MIN_GATE_WIDTH_M)
+      errors.push(`The gate must be at least ${formatLength(MIN_GATE_WIDTH_M, u, 0)} wide.`);
+  }
 
   const ha = area / 10_000;
   if (errors.length === 0 && (ha < TYPICAL_AREA_HA.min || ha > TYPICAL_AREA_HA.max))
@@ -168,6 +206,8 @@ export function draftFromMsg(f: FieldMsg): FieldDraft {
     name: f.name,
     boundary: f.boundary,
     keepOut: f.keep_out.map((z) => z.points),
+    // A robot running older software doesn't send a gate.
+    gate: f.gate ?? [],
     headlandWidthM: f.headland_width_m,
     source: (['drawn', 'recorded', 'imported'].includes(f.source) ? f.source : 'drawn') as FieldDraft['source'],
     notes: f.notes,
@@ -180,6 +220,7 @@ export function msgFromDraft(d: FieldDraft): Omit<FieldMsg, 'area_m2' | 'created
     name: d.name.trim(),
     boundary: d.boundary,
     keep_out: d.keepOut.map((points) => ({ points })),
+    gate: d.gate,
     headland_width_m: d.headlandWidthM,
     source: d.source,
     notes: d.notes,

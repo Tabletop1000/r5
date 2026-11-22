@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <limits>
 #include <utility>
 
 namespace r5_dashboard::geo
@@ -167,6 +168,23 @@ bool ring_inside(const Ring & inner, const Ring & outer)
   return std::all_of(inner.begin(), inner.end(), [&outer](const XY & p) {
              return point_in_ring(p, outer);
            }) && !rings_cross(inner, outer);
+}
+
+double distance_to_ring(const XY & p, const Ring & ring)
+{
+  double best = std::numeric_limits<double>::infinity();
+  const std::size_t n = ring.size();
+  for (std::size_t i = 0; i < n; ++i) {
+    const XY & a = ring[i];
+    const XY & b = ring[(i + 1) % n];
+    const double dx = b.x - a.x;
+    const double dy = b.y - a.y;
+    const double len2 = dx * dx + dy * dy;
+    const double t = len2 > 0.0 ?
+      std::clamp(((p.x - a.x) * dx + (p.y - a.y) * dy) / len2, 0.0, 1.0) : 0.0;
+    best = std::min(best, distance(p, {a.x + t * dx, a.y + t * dy}));
+  }
+  return best;
 }
 
 std::vector<XY> simplify(const std::vector<XY> & points, double tolerance)

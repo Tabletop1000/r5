@@ -86,6 +86,7 @@ Wireframe: a gallery of field thumbnails ("New", "River paddock", "East field", 
 | `boundary` | polygon, WGS84 | Outer edge of the field. Must not self-intersect. |
 | `headland_width_m` | number | Width of the headland (turnrow): the strip at the ends of the rows where the robot turns. Fields2Cover generates it inside the boundary from this width. Default comes from robot config (placeholder: 2.0 m); editable per field. |
 | `keep_out` | list of polygons, WGS84 | Known obstacles and no-go zones. Each must lie inside the boundary. |
+| `gate` | 2 points, WGS84, or none | Gate posts on the boundary, at least 1 m apart. Spray jobs drive into and out of the field through the gate when going to or from home. |
 | `source` | `drawn` \| `recorded` \| `imported` | |
 | `area_m2` | number | Calculated, not entered |
 | `created`, `modified` | timestamps | |
@@ -118,7 +119,8 @@ Wireframe: a gallery of field thumbnails ("New", "River paddock", "East field", 
     and the RTK-fixed filter is switched off for that.
   - Keep-out zones can be recorded the same way, as a second step.
 - **FM-5 Edit.** The user can move, add and delete boundary and keep-out vertices, add or remove keep-out
-  zones, change the headland width and rename the field.
+  zones, add, move or remove the gate (two posts placed on the boundary, one click each), change
+  the headland width and rename the field.
 - **FM-6 Validation.** Saving is refused, with a clear message, if the boundary self-intersects, has
   fewer than 3 points, or a keep-out zone crosses the boundary. A warning (not a block) is shown if
   the area is outside 0.1–3 ha.
@@ -350,7 +352,7 @@ In simulation a stub node accepts these and logs the commands.
 - **6.2** Writes are atomic (write to a temporary file, then rename), so a power cut cannot leave a
   half-written field.
 - **6.3** Fields: `fields/<id>.geojson`, a GeoJSON `FeatureCollection` with the boundary feature and
-  keep-out features, plus field properties.
+  keep-out features, a `gate` LineString if the field has one, plus field properties.
 - **6.4** Statistics (operating hours, distance, last service) are saved at least once a minute and on
   clean shutdown.
 - **6.5** Job settings (last-used spray values per field) and robot defaults (boom width, tank size,

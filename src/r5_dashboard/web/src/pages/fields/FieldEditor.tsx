@@ -1,9 +1,10 @@
-import { useCallback, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ConfirmDialog } from '../../components/ConfirmDialog';
 import { useDisplay } from '../../display/DisplayContext';
-import { formatArea, inputNumber, length } from '../../display/units';
-import { checkField, MAX_HEADLAND_M, msgFromDraft, draftFromMsg, type FieldDraft } from '../../fields/geo';
+import { formatArea, formatLength, inputNumber, length } from '../../display/units';
+import { checkField, LocalProjection, MAX_HEADLAND_M, msgFromDraft, draftFromMsg, type FieldDraft } from '../../fields/geo';
 import { DrawLayer, type DrawApi, type DrawShapes, type Role } from '../../map/DrawLayer';
+import { GatePicker } from '../../map/GatePicker';
 import { FieldsLayer, FitTo, HomeMarker, RobotMarker, TrackLayer } from '../../map/layers';
 import { MapView } from '../../map/MapView';
 import { useRobot, useTopic } from '../../ros/RobotContext';
@@ -24,7 +25,18 @@ interface Props {
   onCancel: () => void;
 }
 
-/** Draw or edit a field: boundary, keep-out zones, headland width and name (spec FM-3, FM-5, FM-6). */
+/** Width of a gate in metres. */
+function gateWidthM(gate: LatLon[]): number {
+  if (gate.length !== 2) return 0;
+  const proj = LocalProjection.around(gate);
+  const [a, b] = gate.map((p) => proj.toXY(p));
+  return Math.hypot(a[0] - b[0], a[1] - b[1]);
+}
+
+/**
+ * Draw or edit a field: boundary, keep-out zones, gate, headland width and name (spec FM-3, FM-5,
+ * FM-6). The gate is where the robot drives into and out of the field.
+ */
 export function FieldEditor({ initial, otherNames, startAt, home, fromRecording, notices, onSaved, onCancel }: Props) {
   const robot = useRobot();
   const drawApi = useRef<DrawApi | null>(null);
@@ -36,6 +48,8 @@ export function FieldEditor({ initial, otherNames, startAt, home, fromRecording,
   const [confirmCancel, setConfirmCancel] = useState(false);
   const [recordingKeepOut, setRecordingKeepOut] = useState(false);
   const [loadProblem, setLoadProblem] = useState<string | null>(null);
+  // Placing the gate: null when not, else the first post once it's placed.
+  const [gatePicking, setGatePicking] = useState<{ first: LatLon | null } | null>(null);
   const recording = useTopic<RecordingStatus>(TOPICS.recordingStatus).message;
 
   const initialShapes = useMemo<DrawShapes>(() => ({ boundary: initial.boundary, keepOut: initial.keepOut }), [initial]);
@@ -84,6 +98,35 @@ export function FieldEditor({ initial, otherNames, startAt, home, fromRecording,
     }
   }
 
+  function startGate() {
+    drawApi.current?.setPaused(true);
+    setGatePicking({ first: null });
+  }
+
+  const stopGate = useCallback(() => {
+    drawApi.current?.setPaused(false);
+    setGatePicking(null);
+  }, []);
+
+  function pickGatePost(post: LatLon) {
+    const first = gatePicking?.first;
+    if (!first) {
+      setGatePicking({ first: post });
+      return;
+    }
+    setDraft((d) => ({ ...d, gate: [first, post] }));
+    stopGate();
+  }
+
+  useEffect(() => {
+    if (!gatePicking) return;
+    const key = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') stopGate();
+    };
+    window.addEventListener('keydown', key);
+    return () => window.removeEventListener('keydown', key);
+  }, [gatePicking, stopGate]);
+
   const recordingActive = recording?.state === RECORDING_STATE.RECORDING;
   const recordingDone = recording?.state === RECORDING_STATE.FINISHED;
 
@@ -127,7 +170,17 @@ export function FieldEditor({ initial, otherNames, startAt, home, fromRecording,
 
             <div className="draw-tools">
               <strong>Shape</strong>
-              {drawing ? (
+              {gatePicking ? (
+                <>
+                  <p className="hint">
+                    Move along the boundary and click to place the {gatePicking.first ? 'second' : 'first'} gate post. The robot drives into
+                    and out of the field between the two posts.
+                  </p>
+                  <button type="button" className="secondary small" onClick={stopGate}>
+                    Cancel gate
+                  </button>
+                </>
+              ) : drawing ? (
                 <>
                   <p className="hint">
                     {drawing === 'boundary' ? 'Click on the map to place the boundary corners.' : 'Click on the map to place the keep-out zone corners.'}{' '}
@@ -158,6 +211,14 @@ export function FieldEditor({ initial, otherNames, startAt, home, fromRecording,
                     >
                       Record keep-out zone
                     </button>
+                    <button type="button" className="secondary small" disabled={draft.boundary.length < 3} onClick={startGate}>
+                      {draft.gate.length ? 'Move gate' : 'Add gate'}
+                    </button>
+                    {draft.gate.length > 0 && (
+                      <button type="button" className="secondary small" onClick={() => setDraft((d) => ({ ...d, gate: [] }))}>
+                        Remove gate
+                      </button>
+                    )}
                     {selected === 'keep_out' && (
                       <button type="button" className="secondary small" onClick={() => drawApi.current?.removeSelected()}>
                         Remove selected zone
@@ -184,6 +245,7 @@ export function FieldEditor({ initial, otherNames, startAt, home, fromRecording,
             <div className="field-summary">
               <span>Area: {check.areaM2 ? formatArea(check.areaM2, units) : '—'}</span>
               <span>Keep-out zones: {draft.keepOut.length}</span>
+              <span>Gate: {draft.gate.length === 2 ? formatLength(gateWidthM(draft.gate), units, 1) + ' wide' : 'none'}</span>
             </div>
             {notices?.map((n) => (
               <p key={n} className="warn-text small">
@@ -207,7 +269,7 @@ export function FieldEditor({ initial, otherNames, startAt, home, fromRecording,
             )}
             {saveError && <p className="error">{saveError}</p>}
             <div className="button-row">
-              <button type="submit" className="primary" disabled={check.errors.length > 0 || saving || drawing !== null}>
+              <button type="submit" className="primary" disabled={check.errors.length > 0 || saving || drawing !== null || gatePicking !== null}>
                 {saving ? 'Saving…' : 'Save field'}
               </button>
               <button type="button" className="secondary" onClick={cancel}>
@@ -227,6 +289,7 @@ export function FieldEditor({ initial, otherNames, startAt, home, fromRecording,
           <TrackLayer points={recording.points} closed={recording.state === RECORDING_STATE.FINISHED} />
         )}
         <DrawLayer initial={initialShapes} apiRef={drawApi} onChange={onShapes} onSelect={setSelected} onModeChange={setDrawing} onLoadProblem={setLoadProblem} />
+        {gatePicking && <GatePicker boundary={draft.boundary} firstPost={gatePicking.first} onPick={pickGatePost} />}
       </MapView>
 
       <ConfirmDialog

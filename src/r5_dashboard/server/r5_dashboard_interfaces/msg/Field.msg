@@ -6,6 +6,9 @@ string name
 LatLon[] boundary
 # Known obstacles and no-go zones, each inside the boundary.
 GeoPolygon[] keep_out
+# Where the robot drives into and out of the field: the two gate posts, on the boundary. Empty if
+# the field has no gate.
+LatLon[] gate
 # Width of the headland (turnrow) strip inside the boundary, where the robot turns.
 float64 headland_width_m
 # "drawn", "recorded" or "imported".

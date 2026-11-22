@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { LatLon } from '../ros/topics';
-import { areaM2, checkField, formatArea, fromRing, LocalProjection, ringSelfIntersects, toRing, type FieldDraft } from './geo';
+import { areaM2, checkField, distanceToRing, formatArea, fromRing, LocalProjection, nearestOnRing, ringSelfIntersects, toRing, type FieldDraft } from './geo';
 import { innerArea } from './headland';
 import { gridLines, gridSpacingM } from '../map/grid';
 
@@ -13,6 +13,7 @@ const draft = (over: Partial<FieldDraft> = {}): FieldDraft => ({
   name: 'East field',
   boundary: square,
   keepOut: [],
+  gate: [],
   headlandWidthM: 2,
   source: 'drawn',
   notes: '',
@@ -57,8 +58,15 @@ describe('checkField (mirrors the robot, spec FM-6)', () => {
     [{ keepOut: [ll([[10, 10], [30, 10], [30, 30]]), ll([[20, 20], [40, 20], [40, 40]])] }, 'overlap'],
     [{ headlandWidthM: 30 }, 'headland'],
     [{ headlandWidthM: NaN }, 'headland'],
+    [{ gate: ll([[40, 0]]) }, '2 posts'],
+    [{ gate: ll([[40, 0], [44, 5]]) }, 'on the boundary'],
+    [{ gate: ll([[40, 0], [40.5, 0]]) }, 'at least 1 m wide'],
   ] as [Partial<FieldDraft>, string][])('rejects %o', (over, reason) => {
     expect(checkField(draft(over), []).errors.join(' ')).toMatch(reason);
+  });
+  it('accepts a gate on the boundary, even across a corner', () => {
+    expect(checkField(draft({ gate: ll([[40, 0], [44, 0.3]]) }), []).errors).toEqual([]);
+    expect(checkField(draft({ gate: ll([[98, 0], [100, 2]]) }), []).errors).toEqual([]);
   });
   it('rejects a duplicate name, ignoring case', () => {
     expect(checkField(draft({ name: 'EAST field' }), ['East field']).errors[0]).toMatch('already');
@@ -92,5 +100,15 @@ describe('grid', () => {
     const g = gridLines({ west: 151.2, south: -33.87, east: 151.21, north: -33.86 }, 16);
     expect(g.features.length).toBeGreaterThan(10);
     expect(g.features.length).toBeLessThanOrEqual(800);
+  });
+});
+
+describe('nearestOnRing', () => {
+  const sq: [number, number][] = [[0, 0], [10, 0], [10, 10], [0, 10]];
+  it('snaps to the nearest edge, inside or out', () => {
+    expect(nearestOnRing([5, 3], sq)).toEqual([5, 0]);
+    expect(nearestOnRing([12, 4], sq)).toEqual([10, 4]);
+    expect(nearestOnRing([13, 14], sq)).toEqual([10, 10]);
+    expect(distanceToRing([5, -2], sq)).toBeCloseTo(2);
   });
 });

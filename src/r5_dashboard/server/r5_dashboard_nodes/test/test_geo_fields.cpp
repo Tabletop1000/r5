@@ -143,9 +143,30 @@ TEST(Validate, InvalidFields)
   add([](Field & f) {f.source = "magic";}, "Unknown field source “magic”.");
   add([](Field & f) {f.boundary = {{95.0, 0.0}, {0.0, 1.0}, {1.0, 0.0}};},
     "A point is outside the valid range of latitude and longitude.");
+  add([](Field & f) {f.gate = ll({{40, 0}});}, "The gate needs 2 posts.");
+  add([](Field & f) {f.gate = ll({{40, 0}, {44, 5}});},
+    "The gate posts must be on the boundary. Add the gate again.");
+  add([](Field & f) {f.gate = ll({{40, 0}, {40.5, 0}});}, "The gate must be at least 1 m wide.");
   for (const auto & c : cases) {
     EXPECT_EQ(invalid_reason(c.field), c.reason);
   }
+}
+
+TEST(Validate, GateOnTheBoundaryPasses)
+{
+  Field f = make_field();
+  f.gate = ll({{40, 0}, {44, 0.3}});  // Within 0.5 m of the boundary.
+  EXPECT_EQ(invalid_reason(f), "");
+  f.gate = ll({{98, 0}, {100, 2}});  // Across a corner.
+  EXPECT_EQ(invalid_reason(f), "");
+}
+
+TEST(Geo, DistanceToRing)
+{
+  const Ring square = {{0, 0}, {10, 0}, {10, 10}, {0, 10}};
+  EXPECT_NEAR(distance_to_ring({5, 3}, square), 3.0, 1e-12);
+  EXPECT_NEAR(distance_to_ring({5, -2}, square), 2.0, 1e-12);
+  EXPECT_NEAR(distance_to_ring({13, 14}, square), 5.0, 1e-12);
 }
 
 TEST(Validate, DuplicateNameIsCaseInsensitive)
@@ -164,6 +185,7 @@ TEST_F(TempDir, FieldStoreSaveListUpdateDelete)
   FieldStore store(dir_, [&] {return times.at(next++);});
   Field f = make_field();
   f.keep_out = {ll({{40, 40}, {60, 40}, {60, 60}})};
+  f.gate = ll({{40, 0}, {44, 0}});
   Field saved = store.save(f);
   EXPECT_FALSE(saved.id.empty());
   EXPECT_NEAR(saved.area_m2, 10000, 1);
@@ -178,6 +200,8 @@ TEST_F(TempDir, FieldStoreSaveListUpdateDelete)
   EXPECT_EQ(data["features"][0]["properties"]["name"], "East field");
   EXPECT_EQ(data["features"][0]["properties"]["created"], "1970-01-01T00:16:40Z");
   EXPECT_EQ(data["features"][1]["properties"]["role"], "keep_out");
+  EXPECT_EQ(data["features"][2]["properties"]["role"], "gate");
+  EXPECT_EQ(data["features"][2]["geometry"]["type"], "LineString");
 
   saved.name = "East paddock";
   const Field updated = store.save(saved);
@@ -193,6 +217,8 @@ TEST_F(TempDir, FieldStoreSaveListUpdateDelete)
     EXPECT_NEAR(listing.fields[0].boundary[i].lon, kSquare100[i].lon, 1e-12);
   }
   EXPECT_EQ(listing.fields[0].keep_out.size(), 1u);
+  ASSERT_EQ(listing.fields[0].gate.size(), 2u);
+  EXPECT_NEAR(listing.fields[0].gate[1].lon, f.gate[1].lon, 1e-12);
   EXPECT_EQ(listing.fields[0].created_s, 1000.0);
 
   EXPECT_TRUE(store.remove(saved.id));

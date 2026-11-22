@@ -23,6 +23,7 @@ from .geo import (
     LatLon,
     LocalProjection,
     close_track,
+    distance_to_ring,
     path_length_m,
     ring_area_m2,
     ring_inside,
@@ -33,6 +34,9 @@ from .geo import (
 MAX_NAME_LENGTH = 60
 MAX_HEADLAND_M = 20.0
 DEFAULT_HEADLAND_M = 2.0
+# How far a gate post may be from the boundary, and the narrowest gate.
+GATE_ON_BOUNDARY_M = 0.5
+MIN_GATE_WIDTH_M = 1.0
 SOURCES = ("drawn", "recorded", "imported")
 _ID_PATTERN = re.compile(r"^[0-9a-f-]{8,64}$")
 
@@ -43,6 +47,8 @@ class Field:
     name: str
     boundary: list[LatLon]
     keep_out: list[list[LatLon]] = field(default_factory=list)
+    # The two gate posts, on the boundary, or empty for no gate.
+    gate: list[LatLon] = field(default_factory=list)
     headland_width_m: float = DEFAULT_HEADLAND_M
     source: str = "drawn"
     notes: str = ""
@@ -82,6 +88,14 @@ class Field:
                     "geometry": {"type": "Polygon", "coordinates": [ring(zone)]},
                 }
             )
+        if self.gate:
+            features.append(
+                {
+                    "type": "Feature",
+                    "properties": {"role": "gate"},
+                    "geometry": {"type": "LineString", "coordinates": [[lon, lat] for lat, lon in self.gate]},
+                }
+            )
         return {"type": "FeatureCollection", "features": features}
 
     @classmethod
@@ -95,11 +109,13 @@ class Field:
         features = data["features"]
         boundary = next(f for f in features if f.get("properties", {}).get("role") == "boundary")
         props = boundary["properties"]
+        gate = next((f for f in features if f.get("properties", {}).get("role") == "gate"), None)
         return cls(
             id=str(props["id"]),
             name=str(props["name"]),
             boundary=ring(boundary),
             keep_out=[ring(f) for f in features if f.get("properties", {}).get("role") == "keep_out"],
+            gate=[(float(lat), float(lon)) for lon, lat, *_ in gate["geometry"]["coordinates"]] if gate else [],
             headland_width_m=float(props.get("headland_width_m", DEFAULT_HEADLAND_M)),
             source=str(props.get("source", "imported")),
             notes=str(props.get("notes", "")),
@@ -154,7 +170,7 @@ def validate(f: Field, other_names: list[str]) -> None:
         raise FieldInvalid(f"The headland width must be between 0 and {MAX_HEADLAND_M:.0f} m.")
     if len(f.boundary) < 3:
         raise FieldInvalid("The boundary needs at least 3 points.")
-    if not _finite(f.boundary) or not all(_finite(z) for z in f.keep_out):
+    if not _finite(f.boundary) or not all(_finite(z) for z in f.keep_out) or not _finite(f.gate):
         raise FieldInvalid("A point is outside the valid range of latitude and longitude.")
 
     proj = LocalProjection.around(f.boundary)
@@ -177,6 +193,14 @@ def validate(f: Field, other_names: list[str]) -> None:
         for j in range(i + 1, len(zones)):
             if rings_cross(zones[i], zones[j]):
                 raise FieldInvalid(f"Keep-out zones {i + 1} and {j + 1} overlap. Merge them into one.")
+    if f.gate:
+        if len(f.gate) != 2:
+            raise FieldInvalid("The gate needs 2 posts.")
+        a, b = (proj.to_xy(p) for p in f.gate)
+        if distance_to_ring(a, outer) > GATE_ON_BOUNDARY_M or distance_to_ring(b, outer) > GATE_ON_BOUNDARY_M:
+            raise FieldInvalid("The gate posts must be on the boundary. Add the gate again.")
+        if math.dist(a, b) < MIN_GATE_WIDTH_M:
+            raise FieldInvalid(f"The gate must be at least {MIN_GATE_WIDTH_M:.0f} m wide.")
 
 
 # ---- Storage (spec FM-8, 6.2, 6.3) ----

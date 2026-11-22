@@ -14,6 +14,7 @@ const field: FieldMsg = {
   name: 'East field',
   boundary: square,
   keep_out: [{ points: zone }],
+  gate: [],
   headland_width_m: 3,
   source: 'drawn',
   notes: 'Wet corner',
@@ -31,6 +32,16 @@ describe('export', () => {
     expect(back.keepOut).toHaveLength(1);
     expect(areaM2(back.boundary)).toBeCloseTo(10_000, -1);
     expect(back.notices).toEqual([]);
+    expect(back.gate).toEqual([]);
+  });
+  it('keeps the gate', () => {
+    const gate = ll([[40, 0], [44, 0]]);
+    const back = parseFieldFile(fieldToGeoJson({ ...field, gate }), 'East_field.geojson');
+    expect(back.gate).toHaveLength(2);
+    back.gate.forEach((p, i) => {
+      expect(p.latitude).toBeCloseTo(gate[i].latitude, 9);
+      expect(p.longitude).toBeCloseTo(gate[i].longitude, 9);
+    });
   });
   it('makes a safe file name', () => {
     expect(exportFileName('River paddock / north')).toBe('River_paddock_north.geojson');

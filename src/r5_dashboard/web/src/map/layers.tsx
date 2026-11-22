@@ -46,12 +46,13 @@ export function useGeoJsonLayers(id: string, data: FeatureCollection, layers: La
 
 type Hex = `#${string}`;
 
-export const FIELD_COLORS: Record<'headland' | 'inner' | 'keepOut' | 'outline' | 'selected', Hex> = {
+export const FIELD_COLORS: Record<'headland' | 'inner' | 'keepOut' | 'outline' | 'selected' | 'gate', Hex> = {
   headland: '#d9a441',
   inner: '#4caf73',
   keepOut: '#d64545',
   outline: '#1f6b3f',
   selected: '#0b5cad',
+  gate: '#7a3fb0',
 };
 
 function fieldFeatures(f: FieldDraft, selected: boolean): Feature[] {
@@ -64,12 +65,17 @@ function fieldFeatures(f: FieldDraft, selected: boolean): Feature[] {
   for (const zone of f.keepOut)
     if (zone.length >= 3)
       features.push({ type: 'Feature', properties: { id: f.id, kind: 'keepout' }, geometry: { type: 'Polygon', coordinates: [toRing(zone)] } });
+  if (f.gate.length === 2) {
+    const coords = f.gate.map((p) => [p.longitude, p.latitude]);
+    features.push({ type: 'Feature', properties: { id: f.id, kind: 'gate' }, geometry: { type: 'LineString', coordinates: coords } });
+    for (const c of coords) features.push({ type: 'Feature', properties: { id: f.id, kind: 'gate-post' }, geometry: { type: 'Point', coordinates: c } });
+  }
   return features;
 }
 
 /**
  * Fields on the map: the headland band (whole field in amber, the inner part in green on top),
- * keep-out zones in red, and outlines (spec FM-2, FM-11).
+ * keep-out zones in red, outlines, and the gate in purple (spec FM-2, FM-11).
  */
 export function FieldsLayer({
   fields,
@@ -100,6 +106,13 @@ export function FieldsLayer({
         'line-color': ['case', ['get', 'selected'], FIELD_COLORS.selected, FIELD_COLORS.outline],
         'line-width': ['case', ['get', 'selected'], 4, 2],
       },
+    },
+    { id: `${id}-gate`, type: 'line', filter: ['==', ['get', 'kind'], 'gate'], paint: { 'line-color': FIELD_COLORS.gate, 'line-width': 5 } },
+    {
+      id: `${id}-gate-post`,
+      type: 'circle',
+      filter: ['==', ['get', 'kind'], 'gate-post'],
+      paint: { 'circle-radius': 5, 'circle-color': FIELD_COLORS.gate, 'circle-stroke-color': '#ffffff', 'circle-stroke-width': 2 },
     },
   ]);
   useEffect(() => {

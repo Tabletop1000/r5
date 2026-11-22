@@ -56,7 +56,10 @@ from r5_dashboard_interfaces.srv import GetJobDefaults, PlanJob, ResumeJob, Star
 from .auth import write_private_file
 from .coverage import SWATH, PlanError, RobotLimits, SpraySettings, plan_coverage
 from .fields import FIX_NAMES, REQUIREMENTS, FieldStore, fix_quality
-from .job import Affine2D, Episode, Tank, along_track, angle_difference, extend_line, flow_for_speed, heading, sprayer_should_be_on, tilt_deg
+from .geo import point_in_ring
+from .job import Affine2D, Episode, Tank, along_track, angle_difference, densify, extend_line, flow_for_speed, gate_waypoints, heading
+from .job import route_around
+from .job import sprayer_should_be_on, tilt_deg
 from .listener import Listener
 from .settings import BATTERY_LOW, BATTERY_STOP, BATTERY_WARN, LINK_LOST, TOO_STEEP, values_from_json
 from .settings import ALERTS_ALLOW_ACKNOWLEDGED, COMMS_CONTINUE, COMMS_DELAYED_RETURN_HOME, COMMS_STOP
@@ -221,6 +224,9 @@ class JobManagerNode(Node):
         # Why the robot is going home: (start of the messages, current action).
         self.home_reason = (LINK_LOST, "Returning home: link lost")
         self.home_xy: tuple[float, float] | None = None  # in the map frame, while a job runs
+        # The field's boundary and (outside, inside) gate waypoints in the map frame, while a job runs.
+        self.field_ring: list[tuple[float, float]] | None = None
+        self.gate_route: tuple[tuple[float, float], tuple[float, float]] | None = None
 
         # Low battery and slope (see check_battery, check_slope).
         self.battery_episode = Episode(hold_s=10.0)
@@ -778,6 +784,7 @@ class JobManagerNode(Node):
             self.set_status(message=message)
             self.pause_requested.set()
             return
+        self.pass_gate(self.home_xy, JobStatus.RETURNING_HOME, action)
         self.navigate_to(self.home_xy, 0.0, JobStatus.RETURNING_HOME, action, any_heading=True)
         message = f"{prefix}, so the robot drove home. {then}"
         if prefix == LINK_LOST:
@@ -785,6 +792,7 @@ class JobManagerNode(Node):
         self.set_status(message=message)
         self.pause_requested.set()
         self.check_pause(JobStatus.RETURNING_TO_WORK, "Returning to where the robot stopped")
+        self.pass_gate(stopped_at, JobStatus.RETURNING_TO_WORK, "Returning to where the robot stopped")
         self.navigate_to(stopped_at, stopped_yaw, JobStatus.RETURNING_TO_WORK, "Returning to where the robot stopped")
 
     # ---- Running a job ----
@@ -820,8 +828,14 @@ class JobManagerNode(Node):
             home = transform.apply(plan.projection.to_xy(home_ll)) if home_ll else None
             self.home_xy = home
             self.spray_speed_mps = speed_mps
+            self.field_ring = [transform.apply(plan.projection.to_xy(p)) for p in fld.boundary]
+            self.gate_route = None
+            if len(fld.gate) == 2:
+                a, b = (transform.apply(plan.projection.to_xy(p)) for p in fld.gate)
+                self.gate_route = gate_waypoints(a, b, self.field_ring)
 
             first = sections[0][1]
+            self.pass_gate(first[0], JobStatus.GOING_TO_START, f"Going to {fld.name}")
             self.navigate_to(first[0], heading(first[0], first[1]), JobStatus.GOING_TO_START, f"Going to the start of {fld.name}")
 
             swaths_done = 0
@@ -856,6 +870,8 @@ class JobManagerNode(Node):
     def finish(self, state: int, action: str, message: str) -> None:
         self.publish_sprayer(False, 0.0)
         self.spray_speed_mps = None
+        self.field_ring = None
+        self.gate_route = None
         self.speed_kind = None
         self.home_requested.clear()
         self.set_speed_limit(0.0)  # 0 removes the limit
@@ -869,6 +885,7 @@ class JobManagerNode(Node):
         if home is None:
             raise RuntimeError("the tank needs refilling but no home point is set")
         self.publish_sprayer(False, 0.0)
+        self.pass_gate(home, JobStatus.RETURNING_HOME, "Returning home to refill")
         self.navigate_to(home, 0.0, JobStatus.RETURNING_HOME, "Returning home to refill", any_heading=True)
         self.set_status(
             state=JobStatus.WAITING_FOR_REFILL,
@@ -885,6 +902,7 @@ class JobManagerNode(Node):
                 break
         tank.refill()
         self.set_status(tank_remaining_l=tank.remaining, message="")
+        self.pass_gate(row_points[0], JobStatus.RETURNING_TO_WORK, f"Returning to {fld.name}")
         self.navigate_to(row_points[0], heading(row_points[0], row_points[1]), JobStatus.RETURNING_TO_WORK, f"Returning to {fld.name}")
 
     def run_swath(self, fld, pts, length, s: SpraySettings, tank: Tank, progress, total, swaths_done, plan) -> None:
@@ -998,6 +1016,41 @@ class JobManagerNode(Node):
     def follow_section(self, points, state: int, action: str, monitor=None) -> None:
         goal = FollowPath.Goal(path=self.path_msg(points), controller_id=self.controller_id)
         self.run_goal(self.follow, goal, state, action, monitor)
+
+    def pass_gate(self, dest, state: int, action: str) -> None:
+        """Gets the robot to the same side of the field boundary as dest, ready to drive to it.
+
+        With a gate, crossing the boundary means driving through it: round the outside of the
+        field to a point just outside the gate, square to it, then straight through (or the same in
+        reverse). Outside the field the robot drives round it rather than across it, because Nav2
+        doesn't know where the field is.
+        """
+        gate, ring = self.gate_route, self.field_ring
+        if ring is None or self.pose is None or dest is None:
+            return
+        inside_now, dest_inside = point_in_ring(self.pose, ring), point_in_ring(dest, ring)
+        if not inside_now and not dest_inside:
+            self.go_around(dest, state, action)
+            return
+        if inside_now == dest_inside or gate is None:
+            return
+        start, end = (gate[1], gate[0]) if inside_now else gate
+        if not inside_now:
+            self.go_around(start, state, f"{action}: going to the gate")
+        self.navigate_to(start, heading(start, end), state, f"{action}: lining up with the gate")
+        self.follow_section(extend_line(start, end, 0.0, 0.0), state, f"{action}: through the gate")
+        if inside_now:
+            self.go_around(dest, state, action)
+
+    def go_around(self, dest, state: int, action: str) -> None:
+        """Outside the field: if the straight line to dest crosses the field, follows a path round
+        it, ending at dest. Otherwise does nothing, and the caller drives straight there."""
+        ring = self.field_ring
+        if ring is None or self.pose is None:
+            return
+        route = route_around(self.pose, dest, ring)
+        if len(route) > 2:
+            self.follow_section(densify(route), state, f"{action}: driving round the field")
 
     def navigate_to(self, xy, yaw: float, state: int, action: str, any_heading: bool = False) -> None:
         if self.pose is not None and math.dist(self.pose, xy) < 1.0 and any_heading:

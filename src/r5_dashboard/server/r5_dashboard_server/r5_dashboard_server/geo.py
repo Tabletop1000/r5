@@ -111,6 +111,17 @@ def ring_inside(inner: Sequence[XY], outer: Sequence[XY]) -> bool:
     return all(point_in_ring(p, outer) for p in inner) and not rings_cross(inner, outer)
 
 
+def distance_to_ring(p: XY, ring: Sequence[XY]) -> float:
+    """Distance from p to the nearest point on the ring's edges."""
+    best = math.inf
+    for a, b in _edges(ring):
+        dx, dy = b[0] - a[0], b[1] - a[1]
+        len2 = dx * dx + dy * dy
+        t = max(0.0, min(1.0, ((p[0] - a[0]) * dx + (p[1] - a[1]) * dy) / len2)) if len2 > 0 else 0.0
+        best = min(best, math.dist(p, (a[0] + t * dx, a[1] + t * dy)))
+    return best
+
+
 def simplify(points: Sequence[XY], tolerance: float) -> list[XY]:
     """Douglas-Peucker: drop points while staying within tolerance of the original line."""
     if len(points) < 3:

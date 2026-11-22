@@ -19,6 +19,10 @@ from r5_dashboard_server.job import (
     extend_line,
     flow_for_speed,
     format_duration,
+    crosses_field,
+    densify,
+    gate_waypoints,
+    route_around,
     heading,
     sprayer_should_be_on,
 )
@@ -101,3 +105,45 @@ def test_format_duration():
     assert format_duration(30) == "0 min" or format_duration(30) == "1 min"
     assert format_duration(45 * 60) == "45 min"
     assert format_duration(135 * 60) == "2 h 15 min"
+
+
+def test_gate_waypoints_are_square_to_the_gate_either_side():
+    square = [(0, 0), (100, 0), (100, 100), (0, 100)]
+    outside, inside = gate_waypoints((40, 0), (44, 0), square, 3.0)
+    assert outside == pytest.approx((42, -3)) and inside == pytest.approx((42, 3))
+    # The order of the posts doesn't matter.
+    assert gate_waypoints((44, 0), (40, 0), square, 3.0) == (pytest.approx((42, -3)), pytest.approx((42, 3)))
+    outside, inside = gate_waypoints((100, 50), (100, 54), square, 3.0)
+    assert outside == pytest.approx((103, 52)) and inside == pytest.approx((97, 52))
+
+
+def test_route_around_goes_round_the_field_not_across_it():
+    square = [(0, 0), (100, 0), (100, 100), (0, 100)]
+    # Clear line: straight there.
+    assert route_around((-10, -10), (50, -5), square) == [(-10, -10), (50, -5)]
+    # Home south-west, gate on the north side: round the west side, not across.
+    route = route_around((-10, -10), (50, 103), square)
+    assert route[0] == (-10, -10) and route[-1] == (50, 103)
+    # Up the west side to just outside the north-west corner, then along the north side.
+    assert route[1:-1] == [pytest.approx((-2, 102))]
+    assert all(not crosses_field(a, b, square) for a, b in zip(route, route[1:]))
+    # Every waypoint keeps its distance from the boundary.
+    assert all(min(abs(p[0]), abs(p[0] - 100), abs(p[1]), abs(p[1] - 100)) >= 1.99 for p in route[1:-1])
+
+
+def test_route_around_a_notch():
+    # A U-shaped field, gate at the bottom of the notch, home below the field.
+    u = [(0, 0), (100, 0), (100, 100), (60, 100), (60, 40), (40, 40), (40, 100), (0, 100)]
+    route = route_around((50, -10), (50, 43), u)
+    assert route[-1] == (50, 43)
+    assert all(not crosses_field(a, b, u) for a, b in zip(route, route[1:]))
+
+
+def test_route_around_gives_up_from_inside():
+    square = [(0, 0), (100, 0), (100, 100), (0, 100)]
+    assert route_around((50, 50), (50, 150), square) == [(50, 50), (50, 150)]
+
+
+def test_densify():
+    pts = densify([(0, 0), (1, 0), (1, 0.5)], 0.25)
+    assert pts[0] == (0, 0) and pts[-1] == (1, 0.5) and len(pts) == 7

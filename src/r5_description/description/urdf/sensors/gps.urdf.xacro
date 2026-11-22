@@ -71,7 +71,7 @@
                 <navsat>
                     <position_sensing>
                         <!-- Gazebo adds horizontal noise to latitude and longitude, so this is in
-                             degrees. 1.5e-5 is about 1.5 m. -->
+                             degrees. 1.5e-5 is about 1.5 m. for RTK use 1.5e-7 -->
                         <horizontal>
                             <noise type="gaussian">
                                 <mean>0.0</mean>
@@ -81,6 +81,7 @@
                         <vertical>
                             <noise type="gaussian">
                                 <mean>0.0</mean>
+                                <!-- for RTK use 0.3 -->
                                 <stddev>2.5</stddev>
                             </noise>
                         </vertical>

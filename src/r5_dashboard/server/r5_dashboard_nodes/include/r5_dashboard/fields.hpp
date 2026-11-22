@@ -28,6 +28,9 @@ using Clock = std::function<double()>;  // Seconds since the epoch.
 constexpr std::size_t kMaxNameLength = 60;
 constexpr double kMaxHeadlandM = 20.0;
 constexpr double kDefaultHeadlandM = 2.0;
+// How far a gate post may be from the boundary, and the narrowest gate.
+constexpr double kGateOnBoundaryM = 0.5;
+constexpr double kMinGateWidthM = 1.0;
 
 struct Field
 {
@@ -35,6 +38,8 @@ struct Field
   std::string name;
   std::vector<LatLon> boundary;
   std::vector<std::vector<LatLon>> keep_out;
+  // The two gate posts, on the boundary, or empty for no gate.
+  std::vector<LatLon> gate;
   double headland_width_m = kDefaultHeadlandM;
   std::string source = "drawn";
   std::string notes;

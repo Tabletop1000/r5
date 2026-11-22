@@ -22,6 +22,7 @@ from r5_dashboard_server.fields import (
 from r5_dashboard_server.geo import (
     LocalProjection,
     close_track,
+    distance_to_ring,
     point_in_ring,
     ring_area_m2,
     ring_inside,
@@ -102,11 +103,26 @@ def test_valid_field_passes():
         ({"headland_width_m": float("nan")}, "headland"),
         ({"source": "magic"}, "source"),
         ({"boundary": [(95.0, 0.0), (0.0, 1.0), (1.0, 0.0)]}, "valid range"),
+        ({"gate": ll([(40, 0)])}, "2 posts"),
+        ({"gate": ll([(40, 0), (44, 5)])}, "on the boundary"),
+        ({"gate": ll([(40, 0), (40.5, 0)])}, "at least 1 m wide"),
     ],
 )
 def test_invalid_fields(changes, reason):
     with pytest.raises(FieldInvalid, match=reason):
         validate(make_field(**changes), [])
+
+
+def test_gate_on_the_boundary_passes():
+    validate(make_field(gate=ll([(40, 0), (44, 0.3)])), [])  # within 0.5 m of the boundary
+    validate(make_field(gate=ll([(98, 0), (100, 2)])), [])  # across a corner
+
+
+def test_distance_to_ring():
+    square = [(0, 0), (10, 0), (10, 10), (0, 10)]
+    assert distance_to_ring((5, 3), square) == pytest.approx(3)
+    assert distance_to_ring((5, -2), square) == pytest.approx(2)
+    assert distance_to_ring((13, 14), square) == pytest.approx(5)
 
 
 def test_duplicate_name_is_case_insensitive():
@@ -120,7 +136,8 @@ def test_duplicate_name_is_case_insensitive():
 def test_store_save_list_update_delete(tmp_path):
     clock = iter([1000.0, 1000.0, 2000.0, 2000.0]).__next__
     store = FieldStore(tmp_path, clock=clock)
-    saved = store.save(make_field(keep_out=[ll([(40, 40), (60, 40), (60, 60)])]))
+    gate = ll([(40, 0), (44, 0)])
+    saved = store.save(make_field(keep_out=[ll([(40, 40), (60, 40), (60, 60)])], gate=gate))
     assert saved.id
     assert saved.area_m2 == pytest.approx(10_000, rel=1e-4)
     assert saved.created_s == 1000.0
@@ -132,6 +149,8 @@ def test_store_save_list_update_delete(tmp_path):
     assert ring[0] == ring[-1] and len(ring) == 5
     assert data["features"][0]["properties"]["name"] == "East field"
     assert data["features"][1]["properties"]["role"] == "keep_out"
+    assert data["features"][2]["properties"]["role"] == "gate"
+    assert data["features"][2]["geometry"]["type"] == "LineString"
 
     saved.name = "East paddock"
     updated = store.save(saved)
@@ -140,6 +159,7 @@ def test_store_save_list_update_delete(tmp_path):
     assert [f.name for f in fields] == ["East paddock"] and problems == []
     assert fields[0].boundary == pytest.approx(SQUARE_100)
     assert len(fields[0].keep_out) == 1
+    assert fields[0].gate == pytest.approx(gate)
 
     assert store.delete(saved.id)
     assert not store.delete(saved.id)

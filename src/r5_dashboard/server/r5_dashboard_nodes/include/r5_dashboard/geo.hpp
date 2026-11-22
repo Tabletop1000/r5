@@ -58,6 +58,8 @@ bool ring_self_intersects(const Ring & ring);
 bool rings_cross(const Ring & a, const Ring & b);
 bool point_in_ring(const XY & p, const Ring & ring);
 bool ring_inside(const Ring & inner, const Ring & outer);
+// Distance from p to the nearest point on the ring's edges.
+double distance_to_ring(const XY & p, const Ring & ring);
 // Douglas-Peucker: drops points while staying within tolerance of the original line.
 std::vector<XY> simplify(const std::vector<XY> & points, double tolerance);
 // Turns a driven track into a simplified ring: joins its end to its start, then simplifies.

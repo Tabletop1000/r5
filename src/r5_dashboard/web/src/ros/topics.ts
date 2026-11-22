@@ -232,6 +232,8 @@ export interface FieldMsg {
   name: string;
   boundary: LatLon[];
   keep_out: GeoPolygon[];
+  /** The two gate posts, on the boundary, or empty for no gate. */
+  gate: LatLon[];
   headland_width_m: number;
   source: string;
   notes: string;

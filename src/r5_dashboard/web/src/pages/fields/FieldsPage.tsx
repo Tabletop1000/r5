@@ -34,6 +34,7 @@ const newDraft = (source: FieldDraft['source'], boundary: LatLon[] = []): FieldD
   name: '',
   boundary,
   keepOut: [],
+  gate: [],
   headlandWidthM: DEFAULT_HEADLAND_M,
   source,
   notes: '',
@@ -189,7 +190,7 @@ function AddFieldCard({
     try {
       const f = parseFieldFile(await file.text(), file.name);
       onImported(
-        { ...newDraft('imported', f.boundary), name: f.name, keepOut: f.keepOut, headlandWidthM: f.headlandWidthM, notes: f.notes },
+        { ...newDraft('imported', f.boundary), name: f.name, keepOut: f.keepOut, gate: f.gate, headlandWidthM: f.headlandWidthM, notes: f.notes },
         f.notices,
       );
     } catch (err) {
