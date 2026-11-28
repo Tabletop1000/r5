@@ -1131,7 +1131,10 @@ class JobManagerNode(Node):
                 failures = 0
 
     def follow_section(self, points, state: int, action: str, monitor=None) -> None:
-        goal = FollowPath.Goal(path=self.path_msg(points), controller_id=self.controller_id)
+        # Densified because the controller only sees path points inside its 6 m local costmap. A
+        # straight turn between rows is just two points; when the far one was over 3 m away the
+        # controller saw only the near one, took it for the goal and turned on the spot for ever.
+        goal = FollowPath.Goal(path=self.path_msg(densify(points)), controller_id=self.controller_id)
         self.run_goal(self.follow, goal, state, action, monitor)
 
     def pass_gate(self, dest, state: int, action: str) -> None:
@@ -1167,7 +1170,7 @@ class JobManagerNode(Node):
             return
         route = route_around(self.pose, dest, ring)
         if len(route) > 2:
-            self.follow_section(densify(route), state, f"{action}: driving round the field")
+            self.follow_section(route, state, f"{action}: driving round the field")
 
     def navigate_to(self, xy, yaw: float, state: int, action: str, any_heading: bool = False) -> None:
         if self.pose is not None and math.dist(self.pose, xy) < 1.0 and any_heading:

@@ -1,7 +1,7 @@
 <?xml version="1.0"?>
 <robot xmlns:xacro="http://www.ros.org/wiki/xacro" name="r5">
 
-    <xacro:property name="wheel_radius" value="0.1" />
+    <xacro:property name="wheel_radius" value="0.125" />  <!-- keep in step with diffbot_controllers.yaml -->
     <xacro:property name="wheel_width" value="0.1" />
     <xacro:property name="wheel_mass" value="9.1" />
     <!-- From config/limits.yaml, the one place the speed limits are set. -->

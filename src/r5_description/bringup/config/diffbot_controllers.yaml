@@ -13,7 +13,7 @@ diffbot_base_controller:
     right_wheel_names: ["front_right_wheel_joint","rear_right_wheel_joint"]
 
     wheel_separation: 0.36  # distance between wheel centres from the URDF meshes
-    wheel_radius: 0.1
+    wheel_radius: 0.125  # 250 mm tyres, measured
 
     wheel_separation_multiplier: 1.0
     left_wheel_radius_multiplier: 1.0

@@ -61,7 +61,7 @@ def test_fill_leaves_other_substitutions(tmp_path):
 @pytest.mark.parametrize(
     "change, reason",
     [
-        ("max_linear_speed: 0.7", "faster than wheel_max_velocity allows"),
+        ("max_linear_speed: 0.8", "faster than wheel_max_velocity allows"),
         ("max_angular_speed: 40.0", "faster than wheel_max_velocity allows"),
         ("max_linear_speed: -1", "positive number"),
         ("max_linear_speed: fast", "positive number"),

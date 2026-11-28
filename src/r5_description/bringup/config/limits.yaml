@@ -11,7 +11,8 @@
 # Launch stops with an error if a top speed needs the wheels to turn faster than
 # wheel_max_velocity.
 
-# What the motors can do, in wheel rad/s. With the 0.1 m wheels, 6 rad/s is 0.6 m/s.
+# What the motors can do, in wheel rad/s. The 130 rpm motors through the 37:20 gearbox give about
+# 7.4 rad/s unloaded, so 6 leaves headroom. With the 0.125 m wheels, 6 rad/s is 0.75 m/s.
 wheel_max_velocity: 6.0
 
 # Top speeds of the robot as a whole.

@@ -19,6 +19,7 @@ from launch_ros.actions import ComposableNodeContainer, Node
 from launch_ros.descriptions import ComposableNode
 from launch_ros.parameter_descriptions import ParameterValue
 from r5_limits import load as load_limits
+from r5_limits import wheel_geometry
 
 # Lower-rate copies of frequent topics, for rosbridge and the dashboard's Python nodes. Every
 # message a Python subscriber receives costs CPU, even if it's then thrown away, and rosbridge's
@@ -149,7 +150,9 @@ def generate_launch_description():
                 package="r5_dashboard_nodes",
                 plugin="r5_dashboard::MotorTestNode",
                 name="motor_test",
-                parameters=[{"use_sim_time": use_sim_time, "cmd_vel_topic": "/mux/test"}],
+                parameters=[
+                    {"use_sim_time": use_sim_time, "cmd_vel_topic": "/mux/test", "wheel_radius": wheel_geometry()[0]}
+                ],
                 remappings=REMAPS,
             ),
             # Logs sprayer commands, until the sprayer exists.

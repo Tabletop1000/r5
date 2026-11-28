@@ -41,6 +41,11 @@ def _share(*parts: str) -> str:
     return os.path.join(get_package_share_directory("r5"), *parts)
 
 
+def wheel_geometry() -> tuple[float, float]:
+    """(wheel_radius, wheel_separation) in metres, from diffbot_controllers.yaml."""
+    return _wheel_geometry()
+
+
 def _wheel_geometry() -> tuple[float, float]:
     """(wheel_radius, wheel_separation) from diffbot_controllers.yaml."""
     with open(_share("config", "diffbot_controllers.yaml")) as f:
